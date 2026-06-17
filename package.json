@@ -44,12 +44,12 @@
   "author": "Ben Emson",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/benemson/claudoro.git"
+    "url": "git+https://github.com/emson/claudoro.git"
   },
   "bugs": {
-    "url": "https://github.com/benemson/claudoro/issues"
+    "url": "https://github.com/emson/claudoro/issues"
   },
-  "homepage": "https://github.com/benemson/claudoro#readme",
+  "homepage": "https://github.com/emson/claudoro#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.19.21",

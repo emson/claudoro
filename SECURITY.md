@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report security issues privately via GitHub's
-[**Report a vulnerability**](https://github.com/benemson/claudoro/security/advisories/new)
+[**Report a vulnerability**](https://github.com/emson/claudoro/security/advisories/new)
 flow, rather than opening a public issue.
 
 We aim to acknowledge reports within 5 working days.

@@ -134,6 +134,39 @@ export const foldRecords = (records, today = new Date().toISOString().slice(0, 1
   return { completedToday, focusMinToday, setIndex, setNumber };
 };
 
+/**
+ * Replay the cadence over records to derive the cycle position cache
+ * (`set_index`, `set_number`). This is the authoritative source for the dots:
+ * `state.set_index`/`set_number` are only a cache of this, refreshed at every
+ * mutation so the per-tick renderer never has to fold history (D-007).
+ *
+ * It mirrors `advanceTo` exactly, so the cache it produces matches the forward
+ * path: every focus that advanced the cycle (completed or skipped) bumps the
+ * index; a long break that ended (completed or skipped) closes the set; aborted
+ * phases never advanced, so they are ignored. Robust to undo by construction:
+ * remove records, re-fold, and the position is correct.
+ *
+ * @param {object[]} records - All records in chronological order
+ * @returns {{ setIndex: number, setNumber: number }}
+ */
+export const deriveCadence = (records) => {
+  let setIndex = 0;
+  let setNumber = 1;
+
+  for (const r of records) {
+    if (r.status !== 'completed' && r.status !== 'skipped') continue;
+    if (r.phase === 'focus') {
+      setIndex += 1;
+    } else if (r.phase === 'long_break') {
+      setIndex = 0;
+      setNumber += 1;
+    }
+    // short_break: a pause in the run, never moves the cycle position
+  }
+
+  return { setIndex, setNumber };
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

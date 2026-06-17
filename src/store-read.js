@@ -29,7 +29,16 @@ export const IDLE_STATE = Object.freeze({
   owner_session: null,
   alarms_fired: [],
   alarm_pid: null,
-  config: { work: 25, short: 5, long: 15, frequency: 4, notify: 1, mute: false },
+  back_checkpoint: null,
+  config: {
+    work: 25,
+    short: 5,
+    long: 15,
+    frequency: 4,
+    notify: 1,
+    mute: false,
+    back_window: 120,
+  },
 });
 
 export const DEFAULT_PREFS = Object.freeze({

@@ -36,10 +36,13 @@ const SETUP_MARKER = '__claudoro_setup__';
 
 const POMO_COMMAND_MD = (pomoBin) => `---
 description: Pomodoro timer for Claude Code
-allowed-tools: Bash(pomo *)
+allowed-tools: Bash(${pomoBin}:*)
 ---
 
 !\`${pomoBin} $ARGUMENTS\`
+
+Display the command output above to the user verbatim, exactly as printed. Do not
+summarize it, reformat it, or add commentary. If the output is empty, say so.
 `;
 
 // ---------------------------------------------------------------------------
@@ -157,7 +160,7 @@ const mergeStatusLine = (paths, pomoBin) => {
     } catch {
       // Corrupt settings.json: never clobber. Print the exact snippet to add.
       console.warn(
-        `[claudoro] settings.json could not be parsed — not touching it.\n` +
+        `[claudoro] settings.json could not be parsed, not touching it.\n` +
           `Add this manually under the top-level object:\n${manualSnippet(pomoBin)}`,
       );
       return { backed_up: null, previous: null };

@@ -22,12 +22,22 @@
 /**
  * Timer configuration captured at `start` (durations are flag-only, D-003).
  * @typedef {object} Config
- * @property {number} work       Focus minutes (default 25)
- * @property {number} short      Short break minutes (default 5)
- * @property {number} long       Long break minutes (default 15)
- * @property {number} frequency  Focuses before a long break (default 4)
- * @property {number} notify     Pre-end warning, minutes before end (default 1)
- * @property {boolean} mute      Start with sound disabled
+ * @property {number} work         Focus minutes (default 25)
+ * @property {number} short        Short break minutes (default 5)
+ * @property {number} long         Long break minutes (default 15)
+ * @property {number} frequency    Focuses before a long break (default 4)
+ * @property {number} notify       Pre-end warning, minutes before end (default 1)
+ * @property {boolean} mute        Start with sound disabled
+ * @property {number} [back_window]  Seconds after a transition during which `back` is allowed (default 120)
+ */
+
+/**
+ * Snapshot captured the instant BEFORE an auto/explicit phase transition fires,
+ * stored on the post-transition state so `back` can restore it within the window.
+ * @typedef {object} BackCheckpoint
+ * @property {object} state               Full LiveState captured before the transition (its own back_checkpoint is null to prevent nesting)
+ * @property {number} transition_epoch    Wall-clock epoch seconds when the transition fired (start of the back-window)
+ * @property {string|null} record_id      id of the completed/skipped record appended by the transition, so `back` can remove it
  */
 
 /**
@@ -50,6 +60,7 @@
  * @property {string|null} owner_session
  * @property {Cue[]} alarms_fired             Cues already claimed this phase (atomic claim)
  * @property {number|null} alarm_pid          Detached one-shot PID (may be stale)
+ * @property {BackCheckpoint|null} back_checkpoint  Pre-transition snapshot for `back`; null when none available
  * @property {Config} config
  */
 

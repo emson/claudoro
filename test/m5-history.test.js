@@ -4,7 +4,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeTempEnv } from './helpers.js';
-import { ensureDirs } from '../src/store.js';
+import { ensureDirs, readState, writeState } from '../src/store.js';
 import { appendFileSync } from 'node:fs';
 import { todayLogFile } from '../src/platform/paths.js';
 import {
@@ -13,6 +13,7 @@ import {
   writeBackup,
   listBackups,
   findLastNCompleted,
+  findAllForToday,
   undoRecords,
   restoreBackup,
 } from '../src/history.js';
@@ -86,6 +87,46 @@ describe('M5: backup + undo + restore (TEST-M5-001, TEST-M5-002)', () => {
 
     const after = readTodayRecords(env);
     assert.ok(!after.find((r) => r.id === found[0].id), 'undone record should be gone');
+  });
+
+  it('findAllForToday returns every record (any phase/status), newest first', () => {
+    const focus = makeRecord('today-focus');
+    const brk = { ...makeRecord('today-break'), phase: 'short_break' };
+    const skipped = makeRecord('today-skip', 'skipped');
+    appendRecord(focus, env);
+    appendRecord(brk, env);
+    appendRecord(skipped, env);
+
+    const all = findAllForToday(env);
+    const ids = all.map((r) => r.id);
+    assert.ok(ids.includes('today-focus'), 'includes focus');
+    assert.ok(ids.includes('today-break'), 'includes break');
+    assert.ok(ids.includes('today-skip'), 'includes skipped');
+    assert.equal(ids[0], 'today-skip', 'newest record first');
+  });
+
+  it('undo --today wipes all of today via findAllForToday + undoRecords', async () => {
+    const all = findAllForToday(env);
+    assert.ok(all.length > 0, 'precondition: today has records');
+    const backupId = await undoRecords(all, env);
+    assert.ok(backupId, 'backup written before wipe');
+    assert.equal(readTodayRecords(env).length, 0, 'today is empty after wipe');
+  });
+
+  it('undo re-derives the cycle position cache so dots reset (TEST-M5-003)', async () => {
+    // Reproduces the reported bug: state.set_index left stale at 6 after an undo,
+    // so the status line kept rendering ●●●● instead of resetting to ○○○○.
+    appendRecord(makeRecord('cad-001'), env);
+    appendRecord(makeRecord('cad-002'), env);
+    // simulate a corrupted/stale cache (e.g. carried forward by repeated starts)
+    writeState({ ...readState(env), set_index: 6, set_number: 1 }, env);
+
+    const all = findAllForToday(env);
+    await undoRecords(all, env);
+
+    const state = readState(env);
+    assert.equal(state.set_index, 0, 'set_index re-derived to 0 after wiping records');
+    assert.equal(state.set_number, 1, 'set_number re-derived to 1');
   });
 
   it('restore reverses an undo (TEST-M5-002)', async () => {

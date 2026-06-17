@@ -4,10 +4,10 @@
 
 **A Pomodoro timer that lives inside the Claude Code terminal.**
 
-A live, ticking countdown in the status line — right where your eyes already are — plus a
+A live, ticking countdown in the status line (right where your eyes already are), plus a
 reliable alarm that fires even when the status line is hidden or every session is closed.
 
-[![CI](https://github.com/benemson/claudoro/actions/workflows/ci.yml/badge.svg)](https://github.com/benemson/claudoro/actions/workflows/ci.yml)
+[![CI](https://github.com/emson/claudoro/actions/workflows/ci.yml/badge.svg)](https://github.com/emson/claudoro/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/claudoro.svg)](https://www.npmjs.com/package/claudoro)
 [![node](https://img.shields.io/node/v/claudoro.svg)](https://nodejs.org)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -19,7 +19,7 @@ reliable alarm that fires even when the status line is hidden or every session i
 </div>
 
 > [!NOTE]
-> _Demo placeholder._ Add an asciinema cast or GIF here — a terminal timer sells itself in
+> _Demo placeholder._ Add an asciinema cast or GIF here: a terminal timer sells itself in
 > motion. Record with `asciinema rec`, or capture a short GIF of the countdown ticking and the
 > alarm firing, and drop it in `docs/`.
 
@@ -28,8 +28,8 @@ looking, and it keeps ticking while you and Claude work.
 
 ## Why
 
-Long Claude Code sessions blur time. Every existing Pomodoro tool — menu-bar app, browser tab,
-phone — sits _outside_ the terminal and competes for the attention you're trying to protect.
+Long Claude Code sessions blur time. Every existing Pomodoro tool (menu-bar app, browser tab,
+phone) sits _outside_ the terminal and competes for the attention you're trying to protect.
 Claudoro renders in the status line, the unused always-visible surface you already watch, so the
 timer costs you no extra glance and no context switch.
 
@@ -44,7 +44,7 @@ pomo setup
 
 `pomo setup` wires Claudoro into Claude Code: it writes the `/pomo` command file, merges the
 `statusLine` block into your `settings.json` (backing it up first), and records everything it
-touched in a manifest so uninstall is clean. It is idempotent — safe to re-run.
+touched in a manifest so uninstall is clean. It is idempotent, safe to re-run.
 
 Open a new Claude Code session and run `/pomo start`. The countdown appears in your status line
 within about a second. **That's the under-2-minute path.**
@@ -121,7 +121,7 @@ advances it, `/pomo back` undoes the last transition within a short window.
 ## History, undo, and privacy
 
 Every completed focus block is appended as an immutable record to a daily JSONL log. Aggregates
-(today's count, cycle position) are **derived** from those records, never stored as counters — so
+(today's count, cycle position) are **derived** from those records, never stored as counters, so
 `undo` can never desync the data.
 
 ```bash

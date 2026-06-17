@@ -3,7 +3,7 @@
   "displayName": "Claudoro",
   "version": "0.1.0",
   "description": "Pomodoro timer for Claude Code — live countdown in the status line",
-  "homepage": "https://github.com/benemson/claudoro",
+  "homepage": "https://github.com/emson/claudoro",
   "author": { "name": "Ben Emson" },
   "license": "MIT",
   "keywords": ["pomodoro", "timer", "focus", "status-line", "productivity"],

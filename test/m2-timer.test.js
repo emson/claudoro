@@ -197,6 +197,194 @@ describe('M2: next resolves a waiting boundary', () => {
   });
 });
 
+describe('M2: back_checkpoint — written by transitions', () => {
+  const END = NOW + 25 * 60;
+
+  it('skip writes a back_checkpoint on the new state', () => {
+    const s = makeRunningState({ phase: 'focus', set_index: 0, end_epoch: END });
+    const { state } = T.skip(s, { nowSec: NOW });
+    assert.ok(state.back_checkpoint, 'checkpoint should be set');
+    assert.equal(state.back_checkpoint.transition_epoch, NOW);
+    assert.equal(typeof state.back_checkpoint.record_id, 'string');
+    // Nested checkpoint must be null (no nesting)
+    assert.equal(state.back_checkpoint.state.back_checkpoint, null);
+  });
+
+  it('next writes a back_checkpoint on the new state', () => {
+    const s = makeRunningState({ mode: 'manual', phase: 'focus', end_epoch: END });
+    const { state } = T.next(s, { nowSec: END + 10 });
+    assert.ok(state.back_checkpoint);
+    assert.equal(state.back_checkpoint.transition_epoch, END + 10);
+    assert.equal(state.back_checkpoint.state.back_checkpoint, null);
+  });
+
+  it('reconcileStep writes a back_checkpoint using detection time as transition_epoch', () => {
+    const s = makeRunningState({ mode: 'auto', phase: 'focus', end_epoch: END });
+    const detectionTime = END + 5;
+    const { state } = T.reconcileStep(s, detectionTime);
+    assert.ok(state.back_checkpoint);
+    assert.equal(state.back_checkpoint.transition_epoch, detectionTime);
+    assert.equal(state.back_checkpoint.state.phase, 'focus');
+  });
+
+  it('start clears back_checkpoint', () => {
+    const s = makeIdleState({
+      back_checkpoint: { state: {}, transition_epoch: 0, record_id: null },
+    });
+    const { state } = T.start(s, { config: s.config, nowSec: NOW });
+    assert.equal(state.back_checkpoint, null);
+  });
+
+  it('stop clears back_checkpoint', () => {
+    const s = makeRunningState({
+      back_checkpoint: { state: {}, transition_epoch: 0, record_id: null },
+    });
+    const { state } = T.stop(s, { nowSec: NOW });
+    assert.equal(state.back_checkpoint, null);
+  });
+
+  it('reset clears back_checkpoint', () => {
+    const s = makeRunningState({
+      back_checkpoint: { state: {}, transition_epoch: 0, record_id: null },
+    });
+    const { state } = T.reset(s, { nowSec: NOW });
+    assert.equal(state.back_checkpoint, null);
+  });
+
+  it('pause preserves back_checkpoint (pausing then back still works within window)', () => {
+    const cp = { state: makeRunningState(), transition_epoch: NOW, record_id: 'abc' };
+    const s = makeRunningState({ back_checkpoint: cp });
+    const { state } = T.pause(s, { nowSec: NOW + 10 });
+    assert.deepStrictEqual(state.back_checkpoint, cp);
+  });
+});
+
+describe('M2: back — restore pre-transition state', () => {
+  const END = NOW + 25 * 60;
+
+  it('returns {ok:false, reason:"none"} when no checkpoint exists', () => {
+    const s = makeRunningState({ back_checkpoint: null });
+    const result = T.back(s, { nowSec: NOW });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'none');
+  });
+
+  it('returns {ok:false, reason:"expired"} when outside the window', () => {
+    const prevState = makeRunningState({ phase: 'focus', end_epoch: END });
+    const s = makeRunningState({
+      phase: 'short_break',
+      back_checkpoint: {
+        state: prevState,
+        transition_epoch: NOW - 200, // 200s ago
+        record_id: 'rec-1',
+      },
+    });
+    const result = T.back(s, { nowSec: NOW, windowSec: 120 });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'expired');
+    assert.ok(result.sinceSec > 120);
+    assert.equal(result.windowSec, 120);
+  });
+
+  it('restores phase, end_epoch, set_index, alarms_fired within the window', () => {
+    const prevState = makeRunningState({
+      phase: 'focus',
+      end_epoch: END,
+      set_index: 1,
+      alarms_fired: ['warning', 'end'],
+      back_checkpoint: null,
+    });
+    const s = makeRunningState({
+      phase: 'short_break',
+      set_index: 2,
+      back_checkpoint: {
+        state: prevState,
+        transition_epoch: NOW - 30,
+        record_id: 'rec-1',
+      },
+    });
+    const result = T.back(s, { nowSec: NOW, windowSec: 120 });
+    assert.equal(result.ok, true);
+    assert.equal(result.state.phase, 'focus');
+    assert.equal(result.state.end_epoch, END);
+    assert.equal(result.state.set_index, 1);
+    assert.deepStrictEqual(result.state.alarms_fired, ['warning', 'end']);
+    assert.equal(result.removeRecordId, 'rec-1');
+  });
+
+  it('restored state has back_checkpoint: null (non-recursive)', () => {
+    const prevState = makeRunningState({ phase: 'focus', back_checkpoint: null });
+    const s = makeRunningState({
+      phase: 'short_break',
+      back_checkpoint: {
+        state: prevState,
+        transition_epoch: NOW - 10,
+        record_id: 'rec-1',
+      },
+    });
+    const result = T.back(s, { nowSec: NOW, windowSec: 120 });
+    assert.equal(result.ok, true);
+    assert.equal(result.state.back_checkpoint, null);
+  });
+
+  it('second back returns {ok:false, reason:"none"} (non-recursive)', () => {
+    const prevState = makeRunningState({ phase: 'focus', back_checkpoint: null });
+    const s = makeRunningState({
+      phase: 'short_break',
+      back_checkpoint: {
+        state: prevState,
+        transition_epoch: NOW - 10,
+        record_id: 'rec-1',
+      },
+    });
+    const first = T.back(s, { nowSec: NOW, windowSec: 120 });
+    assert.equal(first.ok, true);
+    const second = T.back(first.state, { nowSec: NOW, windowSec: 120 });
+    assert.equal(second.ok, false);
+    assert.equal(second.reason, 'none');
+  });
+
+  it('uses config.back_window when windowSec is not passed explicitly', () => {
+    const prevState = makeRunningState({ phase: 'focus', back_checkpoint: null });
+    const s = makeRunningState({
+      phase: 'short_break',
+      config: {
+        work: 25,
+        short: 5,
+        long: 15,
+        frequency: 4,
+        notify: 1,
+        mute: false,
+        back_window: 60,
+      },
+      back_checkpoint: {
+        state: prevState,
+        transition_epoch: NOW - 90, // 90s ago — expired for 60s window
+        record_id: 'rec-1',
+      },
+    });
+    const result = T.back(s, { nowSec: NOW });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'expired');
+    assert.equal(result.windowSec, 60);
+  });
+
+  it('removeRecordId is null when checkpoint record_id is null', () => {
+    const prevState = makeRunningState({ phase: 'focus', back_checkpoint: null });
+    const s = makeRunningState({
+      phase: 'short_break',
+      back_checkpoint: {
+        state: prevState,
+        transition_epoch: NOW - 10,
+        record_id: null,
+      },
+    });
+    const result = T.back(s, { nowSec: NOW, windowSec: 120 });
+    assert.equal(result.ok, true);
+    assert.equal(result.removeRecordId, null);
+  });
+});
+
 describe('M2: CLI arg parsing', () => {
   it('parseArgs handles short flags with values', async () => {
     const { parseArgs } = await import('../src/cli.js');

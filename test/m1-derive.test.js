@@ -10,6 +10,7 @@ import {
   nextPhase,
   isLongBreakDue,
   foldRecords,
+  deriveCadence,
   parseJsonl,
   progressFraction,
   cuesDue,
@@ -133,6 +134,59 @@ describe('derive: foldRecords', () => {
     const r = foldRecords(records, today);
     assert.equal(r.completedToday, 1);
     assert.equal(r.focusMinToday, 25);
+  });
+});
+
+describe('derive: deriveCadence', () => {
+  const focus = (status = 'completed') => ({ phase: 'focus', status });
+  const shortBreak = (status = 'completed') => ({ phase: 'short_break', status });
+  const longBreak = (status = 'completed') => ({ phase: 'long_break', status });
+
+  it('empty records → position 0, set 1 (fresh, shows ○○○○)', () => {
+    assert.deepEqual(deriveCadence([]), { setIndex: 0, setNumber: 1 });
+  });
+
+  it('each completed focus advances the position', () => {
+    const records = [focus(), shortBreak(), focus(), shortBreak()];
+    assert.deepEqual(deriveCadence(records), { setIndex: 2, setNumber: 1 });
+  });
+
+  it('a skipped focus still advances (mirrors advanceTo)', () => {
+    assert.deepEqual(deriveCadence([focus('skipped')]), { setIndex: 1, setNumber: 1 });
+  });
+
+  it('an aborted focus never advances (stop goes idle, no advance)', () => {
+    assert.deepEqual(deriveCadence([focus('aborted')]), { setIndex: 0, setNumber: 1 });
+  });
+
+  it('short breaks never move the position', () => {
+    assert.deepEqual(deriveCadence([shortBreak(), shortBreak()]), {
+      setIndex: 0,
+      setNumber: 1,
+    });
+  });
+
+  it('a completed long break closes the set and resets the position', () => {
+    const records = [
+      focus(),
+      shortBreak(),
+      focus(),
+      shortBreak(),
+      focus(),
+      shortBreak(),
+      focus(),
+      longBreak(),
+    ];
+    assert.deepEqual(deriveCadence(records), { setIndex: 0, setNumber: 2 });
+  });
+
+  it('is robust to undo: removing records re-derives a lower position', () => {
+    const full = [focus(), shortBreak(), focus()];
+    assert.deepEqual(deriveCadence(full), { setIndex: 2, setNumber: 1 });
+    // simulate undoing the trailing focus
+    assert.deepEqual(deriveCadence(full.slice(0, 2)), { setIndex: 1, setNumber: 1 });
+    // simulate undoing everything (the reported bug: should reset to empty dots)
+    assert.deepEqual(deriveCadence([]), { setIndex: 0, setNumber: 1 });
   });
 });
 

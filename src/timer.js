@@ -17,8 +17,14 @@ import { nowEpoch, phaseDuration, isLongBreakDue } from './derive.js';
  * Begin a focus phase.
  * If a block is already running, returns null (caller reports it — never silent overwrite).
  *
+ * The cycle position is taken from `opts.cadence` (derived from records by the
+ * caller) so a fresh start always reflects the true history, never a stale
+ * stored counter left behind by an undo or a hand-edited log (D-007). Falls back
+ * to the state's cached value when no cadence is supplied (keeps pure unit tests
+ * and any caller that does not need re-derivation working).
+ *
  * @param {object} state - Current state
- * @param {object} opts - { config, mode, label, sessionId, nowSec }
+ * @param {object} opts - { config, mode, label, sessionId, nowSec, cadence }
  * @returns {{ state: object } | null}
  */
 export const start = (state, opts = {}) => {
@@ -27,7 +33,9 @@ export const start = (state, opts = {}) => {
   const now = opts.nowSec ?? nowEpoch();
   const config = opts.config ?? state.config;
   const planned = config.work;
-  const id = makeRecordId(now, (state.set_index ?? 0) + 1);
+  const setIndex = opts.cadence?.setIndex ?? state.set_index ?? 0;
+  const setNumber = opts.cadence?.setNumber ?? state.set_number ?? 1;
+  const id = makeRecordId(now, setIndex + 1);
 
   return {
     state: {
@@ -42,8 +50,11 @@ export const start = (state, opts = {}) => {
       mode: opts.mode ?? state.mode ?? 'auto',
       label: opts.label ?? state.label ?? null,
       owner_session: opts.sessionId ?? state.owner_session,
+      set_index: setIndex,
+      set_number: setNumber,
       alarms_fired: [],
       alarm_pid: null,
+      back_checkpoint: null, // starting fresh clears any prior checkpoint
       current_record_id: id,
       config,
     },
@@ -91,6 +102,7 @@ export const stop = (state, opts = {}) => {
       phase: null,
       alarm_pid: null,
       alarms_fired: [],
+      back_checkpoint: null, // stopping invalidates any prior checkpoint
     },
     record,
   };
@@ -104,7 +116,8 @@ export const skip = (state, opts = {}) => {
   if (state.run_state === 'idle') return null;
   const now = opts.nowSec ?? nowEpoch();
   const record = finalizeRecord(state, 'skipped', now);
-  return { state: advanceTo(state, now), record };
+  const advanced = advanceTo(state, now);
+  return { state: withCheckpoint(state, advanced, now, record.id), record };
 };
 
 // ---------------------------------------------------------------------------
@@ -126,6 +139,7 @@ export const reset = (state, opts = {}) => {
       paused_total_sec: 0,
       alarms_fired: [],
       alarm_pid: null,
+      back_checkpoint: null, // resetting the phase invalidates the prior checkpoint
     },
   };
 };
@@ -144,13 +158,42 @@ export const next = (state, opts = {}) => {
   const now = opts.nowSec ?? nowEpoch();
   if (now < state.end_epoch) return null; // not at a boundary yet
   const record = finalizeRecord(state, 'completed', now);
-  return { state: advanceTo(state, now), record };
+  const advanced = advanceTo(state, now);
+  return { state: withCheckpoint(state, advanced, now, record.id), record };
 };
 
-/** Undo the last transition within the back-window. */
-export const back = (_state, _opts = {}) => {
-  // TODO: M2 — check back-window; undo if within it
-  return null;
+/**
+ * Undo the last auto/explicit phase transition, if it is still inside the
+ * back-window. Restores the pre-transition snapshot verbatim (phase, end_epoch,
+ * set_index/number, label, alarms_fired) so remaining time is what it was at the
+ * boundary. Reports the record id to remove from the log so aggregates re-derive.
+ * Non-recursive: the restored state carries no checkpoint.
+ *
+ * @param {object} state
+ * @param {object} opts - { nowSec, windowSec }
+ * @returns {{ ok: true, state: object, removeRecordId: string|null }
+ *         | { ok: false, reason: 'none' | 'expired', sinceSec?: number, windowSec?: number }}
+ */
+export const back = (state, opts = {}) => {
+  const cp = state.back_checkpoint;
+  if (!cp) return { ok: false, reason: 'none' };
+
+  const now = opts.nowSec ?? nowEpoch();
+  const windowSec = opts.windowSec ?? state.config?.back_window ?? 120;
+  const sinceSec = now - cp.transition_epoch;
+
+  if (sinceSec > windowSec) {
+    return { ok: false, reason: 'expired', sinceSec, windowSec };
+  }
+
+  // Restore the snapshot verbatim. It already has back_checkpoint: null, so a
+  // second `back` is a no-op (non-recursive). alarms_fired is restored to its
+  // pre-transition value so re-fire is suppressed (the end cue is already there).
+  return {
+    ok: true,
+    state: { ...cp.state, back_checkpoint: null },
+    removeRecordId: cp.record_id ?? null,
+  };
 };
 
 /** Add minutes to the current phase. */
@@ -196,12 +239,35 @@ export const reconcileStep = (state, now) => {
   if (now < state.end_epoch) return null;
   if (boundaryWaits(state.mode, state.phase)) return null;
   const record = finalizeRecord(state, 'completed', state.end_epoch);
-  return { state: advanceTo(state, now), record };
+  const advanced = advanceTo(state, now);
+  // The back-window starts from `now` (the detection time), not from end_epoch:
+  // if no session was open at the natural end, the user's chance to say "go back"
+  // only begins when this reconcile actually fires.
+  return { state: withCheckpoint(state, advanced, now, record.id), record };
 };
 
 // ---------------------------------------------------------------------------
 // Phase advancement helpers (internal)
 // ---------------------------------------------------------------------------
+
+/**
+ * Attach a back-checkpoint to `nextState` so `back` can restore `prevState`.
+ * The captured snapshot's own back_checkpoint is nulled to prevent nesting
+ * (checkpoints never chain, so `back` is non-recursive by construction).
+ *
+ * @param {object} prevState - State BEFORE the transition
+ * @param {object} nextState - State AFTER advancing (from advanceTo)
+ * @param {number} transitionEpoch - Wall-clock epoch when the transition fired
+ * @param {string|null} recordId - id of the record written by the transition
+ */
+const withCheckpoint = (prevState, nextState, transitionEpoch, recordId) => ({
+  ...nextState,
+  back_checkpoint: {
+    state: { ...prevState, back_checkpoint: null },
+    transition_epoch: transitionEpoch,
+    record_id: recordId,
+  },
+});
 
 /** Enter `phase`, running, with a fresh end_epoch and a fresh record id. */
 const enterPhase = (state, phase, now) => {

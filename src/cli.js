@@ -3,6 +3,8 @@
  * Each verb is an async function that receives { positional, flags, env }.
  * Side effects (printing, process.exit) happen here; timer.js stays pure.
  */
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import {
   ensureDirs,
   readState,
@@ -12,10 +14,32 @@ import {
   writePrefs,
 } from './store.js';
 import * as T from './timer.js';
-import { appendRecord } from './history.js';
+import {
+  appendRecord,
+  findLastNCompleted,
+  findAllForToday,
+  undoRecords,
+  readTodayRecords,
+  readRecordsForDate,
+  readAllRecords,
+  listBackups,
+  restoreBackup,
+  ensureLogFile,
+} from './history.js';
 import { scheduleAlarm, cancelAlarm, reconcileAndReschedule } from './alarm.js';
-import { renderHelp, renderStatus, renderJson } from './output.js';
-import { remaining, formatMMSS, nowEpoch } from './derive.js';
+import {
+  renderHelp,
+  renderStatus,
+  renderJson,
+  renderLog,
+  renderBackups,
+  renderUndoPlan,
+  renderUndoResult,
+  renderBackupList,
+  renderRestoreResult,
+  isTTY,
+} from './output.js';
+import { remaining, formatMMSS, nowEpoch, foldRecords, deriveCadence } from './derive.js';
 import { setup, uninstall } from './setup.js';
 import { render as renderStatusline } from './statusline.js';
 
@@ -125,8 +149,12 @@ const cmdStart = async ({ positional, flags }) => {
   };
   const mode = flags.mode ?? prefs.mode; // flag > persisted > default (D-006a)
 
+  // Derive the cycle position from records so a fresh start reflects real
+  // history, never a stale counter left by undo or a hand-edited log (D-007).
+  const cadence = deriveCadence(readAllRecords());
+
   const { changed, state } = await applyTransition((s) =>
-    T.start(s, { config, mode, label, sessionId }),
+    T.start(s, { config, mode, label, sessionId, cadence }),
   );
 
   if (!changed) {
@@ -195,8 +223,65 @@ const cmdNext = async () => {
 };
 
 const cmdBack = async () => {
-  // TODO: M2 — undo last transition within the back-window
-  console.log('`back` is not yet implemented.');
+  const now = nowEpoch();
+  const before = readState();
+  const result = T.back(before, { nowSec: now });
+
+  if (!result.ok) {
+    if (result.reason === 'none') {
+      console.log('Nothing to undo. `back` only reverses the last phase transition.');
+    } else {
+      console.log(
+        `Back window closed (${result.windowSec}s; ${result.sinceSec}s have elapsed). ` +
+          `Use \`pomo start\` to begin a new block.`,
+      );
+    }
+    return;
+  }
+
+  // Remove the auto-completed log record BEFORE restoring state (D-007): the
+  // backup inside undoRecords then captures the post-transition state, so a
+  // later `pomo restore` reproduces the moment just before the user ran `back`.
+  // undoRecords only uses r.id and r.started from each record; the pre-transition
+  // state's `started` field is the exact started epoch of the phase that was
+  // finalized, so this stub is sufficient.
+  if (result.removeRecordId) {
+    undoRecords([
+      {
+        id: result.removeRecordId,
+        started: before.back_checkpoint.state.started,
+      },
+    ]);
+  }
+
+  // Restore the pre-transition state under the lock. Re-read inside the mutation
+  // and guard on transition_epoch so two racing `back`s cannot double-restore.
+  let applied = false;
+  const restored = await mutateState((s) => {
+    if (
+      !s.back_checkpoint ||
+      s.back_checkpoint.transition_epoch !== before.back_checkpoint.transition_epoch
+    ) {
+      return s; // state moved on or another session already backed out
+    }
+    applied = true;
+    return result.state;
+  });
+
+  if (!applied) {
+    console.log('Nothing to undo (state changed since you ran back).');
+    return;
+  }
+
+  // Cancel the new phase alarm and reschedule for the restored phase. The
+  // restored alarms_fired carries over from the pre-transition snapshot, so if
+  // the end cue already fired it will not re-fire (cuesDue finds it claimed).
+  await reschedule(restored, before.alarm_pid);
+
+  const remSec = remaining(restored, now) ?? 0;
+  console.log(
+    `Back to ${(restored.phase ?? 'idle').replace('_', ' ')} (${formatMMSS(remSec)} left).`,
+  );
 };
 
 const cmdExtend = async ({ positional, flags }) => {
@@ -273,8 +358,15 @@ const cmdStatus = async ({ flags }) => {
   await reconcileAndReschedule().catch(() => {});
   const state = readState();
   const prefs = readPrefs();
-  // TODO: M5 fold today's records for aggregates
-  const aggregates = { completedToday: 0, focusMinToday: 0, setIndex: state.set_index };
+  const records = readTodayRecords();
+  const folded = foldRecords(records);
+  const aggregates = {
+    completedToday: folded.completedToday,
+    focusMinToday: folded.focusMinToday,
+    setIndex: state.set_index, // live state is authoritative for in-flight cycle position
+    setNumber: state.set_number,
+    frequency: state.config?.frequency ?? 4,
+  };
 
   if (flags.json) {
     console.log(renderJson({ state, aggregates, prefs }));
@@ -283,22 +375,249 @@ const cmdStatus = async ({ flags }) => {
   }
 };
 
-const cmdLog = async ({ flags }) => {
-  // TODO: M5 — log subcommands (open, backups, --date)
-  console.log('`log` is not yet fully implemented. Use --json for raw output.');
+// ISO date validation pattern
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Default + --today + --date: list records for a given date. */
+const logList = async (flags) => {
+  if (flags.date && !ISO_DATE.test(flags.date)) {
+    console.error(`Invalid date '${flags.date}'. Expected YYYY-MM-DD.`);
+    process.exit(1);
+  }
+  const date =
+    typeof flags.date === 'string' && ISO_DATE.test(flags.date)
+      ? flags.date
+      : new Date().toISOString().slice(0, 10);
+  const records = readRecordsForDate(date);
+  const aggregates = foldRecords(records, date);
+
   if (flags.json) {
-    console.log(renderJson({ records: [] }));
+    console.log(renderJson({ date, records, aggregates }));
+  } else {
+    console.log(renderLog(date, records, aggregates));
   }
 };
 
-const cmdUndo = async () => {
-  // TODO: M5 — undo with dry-run/yes flow
-  console.log('`undo` is not yet implemented.');
+/** List available backups. */
+const logBackups = async (flags) => {
+  const backups = listBackups();
+  if (flags.json) {
+    console.log(renderJson({ backups }));
+  } else {
+    console.log(renderBackups(backups));
+  }
 };
 
-const cmdRestore = async () => {
-  // TODO: M5 — restore from backup id
-  console.log('`restore` is not yet implemented.');
+/** Open today's log file in $EDITOR or print the path. */
+const logOpen = async (flags) => {
+  const file = ensureLogFile();
+  const editor = process.env.VISUAL || process.env.EDITOR;
+
+  if (flags.json) {
+    console.log(renderJson({ path: file, editor: editor ?? null }));
+    return;
+  }
+
+  if (!editor) {
+    console.log(file);
+    return;
+  }
+
+  // Attach the editor to the current TTY and wait for it to close.
+  const child = spawn(editor, [file], { stdio: 'inherit' });
+  await new Promise((resolve) => child.on('close', resolve));
+};
+
+const cmdLog = async ({ positional, flags }) => {
+  const sub = positional[0];
+  if (sub === 'open') return logOpen(flags);
+  if (sub === 'backups') return logBackups(flags);
+  return logList(flags);
+};
+
+/**
+ * Ask a yes/no question on the TTY. Resolves true only on an explicit
+ * y/yes (case-insensitive). Default is No.
+ * @param {string} question
+ * @returns {Promise<boolean>}
+ */
+const promptYN = (question) =>
+  new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${question} `, (answer) => {
+      rl.close();
+      resolve(/^y(es)?$/i.test(answer.trim()));
+    });
+  });
+
+/**
+ * Parse the N argument for `pomo undo [N]`. Returns a valid positive integer
+ * or throws with a usage message via process.exit(1).
+ * @param {string|undefined} raw
+ * @returns {number}
+ */
+const parseUndoCount = (raw) => {
+  if (raw === undefined) return 1;
+  const n = parseInt(raw, 10);
+  if (!Number.isInteger(n) || n <= 0 || String(n) !== raw) {
+    console.error('Usage: pomo undo [N] [--dry-run] [--yes]');
+    process.exit(1);
+  }
+  return n;
+};
+
+export const cmdUndo = async (
+  { positional, flags },
+  deps = {
+    findLastNCompleted,
+    findAllForToday,
+    undoRecords,
+    prompt: promptYN,
+    tty: isTTY,
+  },
+) => {
+  const today = flags.today === true;
+  const n = today ? 0 : parseUndoCount(positional[0]);
+  const records = today ? deps.findAllForToday() : deps.findLastNCompleted(n);
+
+  if (records.length === 0) {
+    if (flags.json) {
+      console.log(
+        renderJson({
+          removed: [],
+          requested: today ? null : n,
+          available: 0,
+          backupId: null,
+          today,
+        }),
+      );
+    } else {
+      console.log(
+        today ? 'No records for today to remove.' : 'No completed focus records to undo.',
+      );
+    }
+    return;
+  }
+
+  if (!today && records.length < n) {
+    console.log(
+      `Only ${records.length} of ${n} requested records are available. Proceeding with ${records.length}.`,
+    );
+  }
+
+  if (flags['dry-run']) {
+    if (flags.json) {
+      console.log(
+        renderJson({
+          removed: records,
+          requested: today ? null : n,
+          available: records.length,
+          backupId: null,
+          dryRun: true,
+          today,
+        }),
+      );
+    } else {
+      console.log(renderUndoPlan(records, n, { today }));
+      console.log('Run with --yes to remove these records.');
+    }
+    return;
+  }
+
+  const yes = flags.yes === true;
+  const confirmCmd = today ? 'pomo undo --today --yes' : `pomo undo ${n} --yes`;
+
+  if (!yes) {
+    // No TTY to prompt on (e.g. the /pomo slash command runs the CLI via Bash
+    // command substitution). Degrade safely to a dry-run: show the plan, mutate
+    // nothing, and tell the caller how to confirm. Exit 0 — refusing to delete
+    // unattended is the correct, successful outcome, not a failure (D-007).
+    if (!deps.tty()) {
+      if (flags.json) {
+        console.log(
+          renderJson({
+            removed: records,
+            requested: today ? null : n,
+            available: records.length,
+            backupId: null,
+            dryRun: true,
+            today,
+            needsConfirm: true,
+          }),
+        );
+      } else {
+        console.log(renderUndoPlan(records, n, { today }));
+        console.log(`Nothing removed. Re-run with --yes to confirm: ${confirmCmd}`);
+      }
+      return;
+    }
+    console.log(renderUndoPlan(records, n, { today }));
+    const ok = await deps.prompt(`Remove ${records.length} record(s)? [y/N]:`);
+    if (!ok) {
+      console.log('Cancelled. Nothing was removed.');
+      return;
+    }
+  }
+
+  const backupId = await deps.undoRecords(records);
+
+  if (flags.json) {
+    console.log(
+      renderJson({
+        removed: records,
+        requested: today ? null : n,
+        available: records.length,
+        backupId,
+        dryRun: false,
+        today,
+      }),
+    );
+  } else {
+    console.log(renderUndoResult(records, backupId));
+  }
+};
+
+const cmdRestore = async (
+  { positional, flags },
+  deps = { listBackups, restoreBackup, prompt: promptYN, tty: isTTY },
+) => {
+  const id = positional[0] ?? null;
+
+  if (!id) {
+    const backups = deps.listBackups();
+    if (flags.json) {
+      console.log(renderJson({ backups }));
+    } else {
+      console.log(renderBackupList(backups));
+    }
+    return;
+  }
+
+  const yes = flags.yes === true;
+
+  if (!yes && deps.tty()) {
+    const ok = await deps.prompt(
+      `Restore from ${id}? Your current state will be backed up first. [y/N]:`,
+    );
+    if (!ok) {
+      console.log('Cancelled. Nothing was restored.');
+      return;
+    }
+  }
+
+  try {
+    await deps.restoreBackup(id);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    console.error('Run `pomo log backups` to list available backups.');
+    process.exit(1);
+  }
+
+  if (flags.json) {
+    console.log(renderJson({ restored: id }));
+  } else {
+    console.log(renderRestoreResult(id));
+  }
 };
 
 const cmdSetup = async ({ flags }) => {

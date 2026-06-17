@@ -19,7 +19,8 @@ import {
 import { join } from 'node:path';
 import { claudoroPaths, logFileForDate, todayLogFile } from './platform/paths.js';
 import { withLock } from './platform/lock.js';
-import { parseJsonl } from './derive.js';
+import { parseJsonl, deriveCadence } from './derive.js';
+import { readState, writeState } from './store-read.js';
 
 /** Write `content` to `file` atomically (temp + rename), like the state store. */
 const atomicWrite = (file, content) => {
@@ -31,6 +32,20 @@ const atomicWrite = (file, content) => {
 // ---------------------------------------------------------------------------
 // Append a record (called by timer verbs when a phase finalizes)
 // ---------------------------------------------------------------------------
+
+/**
+ * Ensure today's log file exists (creates an empty file if absent).
+ * Returns the resolved path. Safe to call repeatedly (idempotent).
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+export const ensureLogFile = (env = process.env) => {
+  const file = todayLogFile(env);
+  const { logsDir } = claudoroPaths(env);
+  mkdirSync(logsDir, { recursive: true });
+  if (!existsSync(file)) writeFileSync(file, '', 'utf8');
+  return file;
+};
 
 /** Append one PhaseRecord to today's JSONL log. */
 export const appendRecord = (record, env = process.env) => {
@@ -57,6 +72,29 @@ export const readRecordsForDate = (date, env = process.env) => {
 /** Read today's records. */
 export const readTodayRecords = (env = process.env) =>
   readRecordsForDate(new Date().toISOString().slice(0, 10), env);
+
+/**
+ * Read every record across all day files in chronological order.
+ * Cold path only (used to re-derive the cadence cache after a record mutation);
+ * never called on the per-tick render path.
+ */
+export const readAllRecords = (env = process.env) =>
+  listLogDates(env).flatMap((date) => readRecordsForDate(date, env));
+
+/**
+ * Re-derive the cadence cache (`set_index`/`set_number`) from records and
+ * persist it into state.json. Keeps the cheap renderer correct-by-construction
+ * after any operation that changes records (D-007).
+ *
+ * Must be called by a caller that ALREADY holds the lock (withLock is not
+ * reentrant): it reads + writes state directly without acquiring it again.
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+const refreshCadenceLocked = (env = process.env) => {
+  const { setIndex, setNumber } = deriveCadence(readAllRecords(env));
+  const state = readState(env);
+  writeState({ ...state, set_index: setIndex, set_number: setNumber }, env);
+};
 
 /** List all available log dates (sorted ascending). */
 export const listLogDates = (env = process.env) => {
@@ -146,6 +184,17 @@ export const findLastNCompleted = (n = 1, env = process.env) => {
 };
 
 /**
+ * Identify every record for today (any phase, any status), most recent first.
+ * Used by `undo --today` to wipe a single day's history in one operation.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {object[]}
+ */
+export const findAllForToday = (env = process.env) => {
+  const today = new Date().toISOString().slice(0, 10);
+  return readRecordsForDate(today, env).slice().reverse();
+};
+
+/**
  * Remove the given records (cross-day).
  * Writes a backup unconditionally before mutating, then rewrites each affected
  * day file atomically. The whole operation runs under the same lock as state
@@ -173,6 +222,10 @@ export const undoRecords = (records, env = process.env) => {
         kept.map((r) => JSON.stringify(r)).join('\n') + (kept.length ? '\n' : ''),
       );
     }
+
+    // Records changed: re-derive the cycle position so the dots can never show a
+    // stale count (the undo-then-start bug). Same lock, so no extra round-trip.
+    refreshCadenceLocked(env);
 
     return backupId;
   });
@@ -205,5 +258,9 @@ export const restoreBackup = (backupId, env = process.env) => {
     for (const f of files) {
       copyFileSync(join(backupDir, f), join(paths.logsDir, f));
     }
+
+    // The restored state.json and logs were consistent at backup time; re-derive
+    // anyway so the cache is correct even if other day files moved on meanwhile.
+    refreshCadenceLocked(env);
   });
 };

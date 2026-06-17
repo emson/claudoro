@@ -42,7 +42,9 @@ describe('M7: setup wiring', () => {
 
     assert.ok(existsSync(paths.pomoCmdFile), 'command file should exist');
     const cmd = readFileSync(paths.pomoCmdFile, 'utf8');
-    assert.match(cmd, /allowed-tools: Bash\(pomo \*\)/);
+    // allowed-tools must match the actual (absolute-path) invocation, not a bare
+    // `pomo` that the `!` injection never runs — see the help-not-displaying fix.
+    assert.match(cmd, /allowed-tools: Bash\([^)]*pomo\.js:\*\)/);
     assert.match(cmd, /\$ARGUMENTS/);
 
     const settings = readJson(paths.claudeSettings);

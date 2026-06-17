@@ -31,6 +31,20 @@ const trySpawn = (cmd, args) =>
     }
   });
 
+/**
+ * Run spawn candidates in order; resolve true at the first exit code 0.
+ * A candidate is [cmd, args]. Missing tool (null) or non-zero falls through.
+ * @param {Array<[string, string[]]>} candidates
+ * @returns {Promise<boolean>} true if any candidate exited 0
+ */
+export const tryChain = async (candidates) => {
+  for (const [cmd, args] of candidates) {
+    const code = await trySpawn(cmd, args);
+    if (code === 0) return true;
+  }
+  return false;
+};
+
 const bell = () => process.stdout.write('\x07');
 
 // Cue types with distinct characters
@@ -39,6 +53,35 @@ export const CUE = {
   focusEnd: 'focusEnd', // warm chime: focus block ends
   breakEnd: 'breakEnd', // gentle prompt: break ends
 };
+
+// Linux: XDG/freedesktop system sound paths per cue
+export const LINUX_OGA = {
+  [CUE.warning]: '/usr/share/sounds/freedesktop/stereo/message.oga',
+  [CUE.focusEnd]: '/usr/share/sounds/freedesktop/stereo/complete.oga',
+  [CUE.breakEnd]: '/usr/share/sounds/freedesktop/stereo/bell.oga',
+};
+
+// aplay is WAV-only; use a known ALSA sample rather than the .oga paths
+export const LINUX_WAV = '/usr/share/sounds/alsa/Front_Left.wav';
+
+// Windows: [console]::Beep frequencies (Hz) and durations (ms) per cue
+export const WIN_BEEP = {
+  [CUE.warning]: [880, 200],
+  [CUE.focusEnd]: [660, 300],
+  [CUE.breakEnd]: [440, 200],
+};
+
+/**
+ * Build PowerShell args that are safe for non-interactive detached use.
+ * @param {string} script
+ * @returns {string[]}
+ */
+export const winPwshArgs = (script) => [
+  '-NoProfile',
+  '-NonInteractive',
+  '-Command',
+  script,
+];
 
 /**
  * Fire a sound cue. `mute` suppresses sound but still shows the OS notification.
@@ -66,21 +109,32 @@ const playMac = async (cue) => {
   if (ok !== 0) bell();
 };
 
-const playLinux = async (_cue) => {
-  // TODO: detect paplay / aplay / ffplay; fall back to bell
-  bell();
+const playLinux = async (cue) => {
+  const oga = LINUX_OGA[cue] || LINUX_OGA[CUE.focusEnd];
+  const ok = await tryChain([
+    ['paplay', [oga]],
+    ['aplay', ['-q', LINUX_WAV]],
+    ['ffplay', ['-nodisp', '-autoexit', '-loglevel', 'quiet', oga]],
+  ]);
+  if (!ok) bell();
 };
 
-const playWin = async (_cue) => {
-  // TODO: PowerShell [console]::beep or Media.SoundPlayer
-  bell();
+const playWin = async (cue) => {
+  const [freq, dur] = WIN_BEEP[cue] || WIN_BEEP[CUE.focusEnd];
+  // Prefer modern PowerShell (pwsh), fall back to Windows PowerShell, then bell.
+  const script = `[console]::Beep(${freq},${dur})`;
+  const ok = await tryChain([
+    ['pwsh', winPwshArgs(script)],
+    ['powershell', winPwshArgs(script)],
+  ]);
+  if (!ok) bell();
 };
 
 const notify = async (cue, label) => {
   const messages = {
     [CUE.warning]: 'Focus block ending soon',
     [CUE.focusEnd]: label ? `Focus complete: ${label}` : 'Focus block complete',
-    [CUE.breakEnd]: 'Break over — ready to focus?',
+    [CUE.breakEnd]: 'Break over: ready to focus?',
   };
   const msg = messages[cue] || messages[CUE.focusEnd];
 
@@ -89,8 +143,31 @@ const notify = async (cue, label) => {
       '-e',
       `display notification "${msg}" with title "Claudoro"`,
     ]);
-  } else if (!IS_WIN) {
-    await trySpawn('notify-send', ['Claudoro', msg]);
+  } else if (IS_WIN) {
+    // Escape backticks and double-quotes before interpolation into PowerShell.
+    const safe = msg.replace(/`/g, '').replace(/"/g, "'");
+    const toast = [
+      "$ErrorActionPreference='SilentlyContinue';",
+      '[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] > $null;',
+      '$t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);',
+      `$t.GetElementsByTagName('text').Item(0).AppendChild($t.CreateTextNode('Claudoro')) > $null;`,
+      `$t.GetElementsByTagName('text').Item(1).AppendChild($t.CreateTextNode('${safe}')) > $null;`,
+      `[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Claudoro').Show([Windows.UI.Notifications.ToastNotification]::new($t))`,
+    ].join('');
+    // Toast unsupported on older Windows / no WinRT: silently skip. The beep is the cue.
+    await tryChain([
+      ['pwsh', winPwshArgs(toast)],
+      ['powershell', winPwshArgs(toast)],
+    ]);
+  } else {
+    // Linux: try modern notify-send with --app-name, fall back to basic form.
+    const ok = await tryChain([
+      ['notify-send', ['--app-name=Claudoro', 'Claudoro', msg]],
+      ['notify-send', ['Claudoro', msg]],
+    ]);
+    // notify-send not available: no OS notification, audio cue is the signal.
+    if (!ok) {
+      /* graceful degrade */
+    }
   }
-  // Windows: TODO PowerShell notification toast
 };
