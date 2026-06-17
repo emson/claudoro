@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/benemson/claudoro/discussions
+    about: Ask questions and share ideas in Discussions rather than opening an issue.

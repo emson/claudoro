@@ -1,0 +1,62 @@
+{
+  "name": "claudoro",
+  "version": "0.1.0",
+  "description": "Pomodoro timer for Claude Code — live countdown in the status line, render-decoupled alarm",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "pomo": "./bin/pomo.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "plugin",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "typecheck": "tsc",
+    "lint": "eslint bin src test",
+    "format": "prettier --write bin src test",
+    "format:check": "prettier --check bin src test",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test"
+  },
+  "keywords": [
+    "claude-code",
+    "pomodoro",
+    "timer",
+    "cli",
+    "focus",
+    "productivity",
+    "status-line",
+    "plugin"
+  ],
+  "license": "MIT",
+  "author": "Ben Emson",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/benemson/claudoro.git"
+  },
+  "bugs": {
+    "url": "https://github.com/benemson/claudoro/issues"
+  },
+  "homepage": "https://github.com/benemson/claudoro#readme",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.19.21",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.4",
+    "typescript": "^6.0.3"
+  }
+}

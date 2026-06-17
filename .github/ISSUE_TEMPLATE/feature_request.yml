@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest an idea for Claudoro
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case, not just the feature. What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+  - type: markdown
+    attributes:
+      value: |
+        Note: some directions are deliberately out of scope for v1 (time-tracking analytics,
+        a separate TUI/GUI, cloud sync). See `specs/charter.md` → "Out (v2+ / non-goals)" and
+        `specs/decisions.md` before proposing — a feature that contradicts a decision needs a
+        new decision entry first.

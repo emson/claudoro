@@ -1,0 +1,20 @@
+{
+  "$comment": "Type-checking only — no build step. We ship plain ESM JS; tsc validates JSDoc types in CI (npm run typecheck).",
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["es2023"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "noUncheckedIndexedAccess": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.js", "bin/**/*.js"],
+  "exclude": ["node_modules", "test"]
+}

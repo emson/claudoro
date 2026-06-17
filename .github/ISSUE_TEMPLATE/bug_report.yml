@@ -1,0 +1,41 @@
+name: Bug report
+description: Something isn't working as documented
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting. Please run `pomo status --json` and include the output below if relevant.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: I ran `pomo start 25`, expected the countdown to tick, but the status line stayed blank.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15.4 / Ubuntu 24.04 / Windows 11
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version (`node --version`)
+      placeholder: v22.14.0
+    validations:
+      required: true
+  - type: input
+    id: claudoro
+    attributes:
+      label: Claudoro version (`pomo --version` or npm)
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: state
+    attributes:
+      label: '`pomo status --json` output (optional)'
+      render: json
