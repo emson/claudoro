@@ -432,7 +432,7 @@ export const COMMAND_HELP = Object.freeze({
       { cmd: 'pomo note --clear', desc: 'empty the label' },
     ],
     notes: [
-      'Additive by default; `pomo label` is a back-compat alias for this command.',
+      'Additive by default; use `pomo label` to overwrite the whole label instead.',
       'Works at any point during a running or paused block, not only at start.',
       'For #tags, prefer `pomo tag review` (quote-free, deduped) over typing "#" here (the shell treats an unquoted # as a comment).',
       'The label is stamped onto the completed record when the block ends.',
@@ -470,18 +470,26 @@ export const COMMAND_HELP = Object.freeze({
   },
 
   label: {
-    summary: 'Alias for `pomo note` (additive). See `pomo help note`.',
+    summary:
+      'Overwrite the label on the current block (replace). Empty or --clear empties it.',
     whenToUse:
-      'Back-compat alias for `note`. Behaves identically: additive by default, --set overwrites, --clear empties. Prefer `pomo note` and `pomo tag` in new usage.',
-    usage: 'pomo label "TEXT" [--set] [--clear]',
+      'The user wants to SET the label to exactly this text, discarding whatever was there (including any #tags). Use label to replace; use `note` to append and `tag` to add #tags.',
+    usage: 'pomo label "TEXT" [--clear]',
+    flags: [{ flag: '--clear', desc: 'empty the label (same as passing "")' }],
     examples: [
-      { cmd: 'pomo label "review PR"', desc: 'append to the label (same as note)' },
-      { cmd: 'pomo label --set "x"', desc: 'overwrite' },
+      { cmd: 'pomo label "review PR"', desc: 'replace the whole label' },
+      { cmd: 'pomo label ""', desc: 'clear the label' },
+      { cmd: 'pomo label --clear', desc: 'clear the label' },
     ],
     notes: [
-      'Identical to `pomo note`; kept so existing muscle memory and scripts keep working.',
+      'Replaces the entire label, including any #tags already in it.',
+      'Works at any point during a running or paused block, not only at start.',
+      'To add without losing what is there, use `pomo note "text"` or `pomo tag <name>`.',
     ],
-    next: ['Use `pomo note` for prose and `pomo tag` for #tags.'],
+    next: [
+      'Append more later with `pomo note "text"`.',
+      'Add #tags with `pomo tag <name>`.',
+    ],
     seeAlso: ['note', 'tag', 'log'],
   },
 

@@ -352,9 +352,36 @@ const cmdView = async ({ positional, flags }) => {
   else console.log(`View set to '${value}'.`);
 };
 
+// `label` OVERWRITES the current label (replace semantics, the original
+// behaviour): `pomo label "x"` sets it to exactly "x". An empty arg or --clear
+// empties it. For additive use, see `cmdNote`; for #tags, see `cmdTag`.
+const cmdLabel = async ({ positional, flags }) => {
+  const text = positional.join(' ').trim();
+  const state = readState();
+  if (state.run_state === 'idle') {
+    console.log('No active block. Start one first with `pomo start`.');
+    return;
+  }
+
+  // `pomo label` with no args at all is a usage hint, not an accidental clear.
+  if (positional.length === 0 && !flags.clear) {
+    console.log('Usage: pomo label "text"   ("" or --clear empties; note appends)');
+    return;
+  }
+
+  if (flags.clear || text === '') {
+    await mutateState((s) => ({ ...s, label: null }));
+    console.log('Label cleared.');
+    return;
+  }
+
+  await mutateState((s) => ({ ...s, label: text }));
+  console.log(`Label set to "${text}".`);
+};
+
 // `note` is additive by default: it APPENDS to the current label (prose or
-// quoted #tags). --set overwrites, --clear empties. `label` is a back-compat
-// alias for the same handler. Tag-aware sugar lives in `cmdTag`.
+// quoted #tags). --set overwrites, --clear empties. For replace semantics use
+// `cmdLabel`; tag-aware sugar lives in `cmdTag`.
 const cmdNote = async ({ positional, flags }) => {
   const text = positional.join(' ').trim();
   const state = readState();
@@ -718,7 +745,7 @@ const VERBS = {
   view: cmdView,
   note: cmdNote,
   tag: cmdTag,
-  label: cmdNote, // back-compat alias for `note`
+  label: cmdLabel, // overwrite (replace); `note` is the additive sibling
   mute: cmdMute,
   unmute: (ctx) => cmdMute({ ...ctx, positional: ['unmute'] }),
   status: cmdStatus,
