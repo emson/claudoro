@@ -7,7 +7,6 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { dim } from '../output.js';
 
 /** Fields available in the passthrough, in display order. */
 const FIELD_ORDER = ['model', 'context', 'git'];
@@ -26,10 +25,11 @@ export const renderPassthrough = (ccJson = {}, passthrough = 'model,context,git'
   for (const field of FIELD_ORDER) {
     if (!enabled.has(field)) continue;
     const value = extractField(field, ccJson);
-    if (value) parts.push(dim(value));
+    if (value) parts.push(value);
   }
 
-  return parts.join(dim(' · '));
+  // Normal intensity (not dim) so the passthrough matches the prompt brightness.
+  return parts.join(' · ');
 };
 
 const extractField = (field, ccJson) => {

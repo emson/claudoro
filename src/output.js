@@ -28,6 +28,19 @@ export const colorMode = () => {
   return isTTY() && process.env.NO_COLOR === undefined;
 };
 
+// Color decision for the STATUS-LINE segment. Unlike colorMode() it does NOT
+// require a TTY: Claude Code captures the segment's stdout (so `isTTY()` is
+// false there) yet the host terminal renders ANSI fine — the same reason
+// supportsEmoji()/supportsLinks() bypass the TTY check. Gating segment color on
+// colorMode() meant it was silently never colored. Honor NO_COLOR and
+// CLAUDORO_COLOR (=never forces plain, =always forces on).
+export const segmentColorMode = () => {
+  const c = process.env.CLAUDORO_COLOR ?? 'auto';
+  if (c === 'always') return true;
+  if (c === 'never') return false;
+  return process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb';
+};
+
 // ---------------------------------------------------------------------------
 // ANSI helpers (no-op when color is off)
 // ---------------------------------------------------------------------------
@@ -44,19 +57,45 @@ const C = {
   tomato: '\x1b[38;5;203m', // 256-color tomato red for focus
   coffee: '\x1b[38;5;178m', // amber for breaks
   teal: '\x1b[38;5;73m', // teal for long break
+  grass: '\x1b[38;5;71m', // 256-color green for the resting progress bar
 };
 
-const wrap = (code, text) => (colorMode() ? `${code}${text}${C.reset}` : text);
+// Build a palette of color functions gated on a chosen mode predicate, so the
+// same ANSI codes serve two render contexts with opposite needs when stdout is
+// piped: CLI output (help/status/log) must be plain when captured (colorMode,
+// TTY-gated, D-008); the status-line segment must color whenever the terminal
+// can render it (segmentColorMode, TERM-gated).
+const makePalette = (on) => {
+  const w = (code) => (t) => (on() ? `${code}${t}${C.reset}` : t);
+  return {
+    dim: w(C.dim),
+    bold: w(C.bold),
+    red: w(C.red),
+    green: w(C.green),
+    yellow: w(C.yellow),
+    cyan: w(C.cyan),
+    tomato: w(C.tomato),
+    amber: w(C.coffee),
+    teal: w(C.teal),
+    grass: w(C.grass),
+  };
+};
 
-export const dim = (t) => wrap(C.dim, t);
-export const bold = (t) => wrap(C.bold, t);
-export const red = (t) => wrap(C.red, t);
-export const green = (t) => wrap(C.green, t);
-export const yellow = (t) => wrap(C.yellow, t);
-export const cyan = (t) => wrap(C.cyan, t);
-export const tomato = (t) => wrap(C.tomato, t);
-export const amber = (t) => wrap(C.coffee, t);
-export const teal = (t) => wrap(C.teal, t);
+// CLI palette (TTY-gated). Individually exported to preserve existing call sites.
+const cli = makePalette(colorMode);
+export const dim = cli.dim;
+export const bold = cli.bold;
+export const red = cli.red;
+export const green = cli.green;
+export const yellow = cli.yellow;
+export const cyan = cli.cyan;
+export const tomato = cli.tomato;
+export const amber = cli.amber;
+export const teal = cli.teal;
+export const grass = cli.grass;
+
+// Status-line palette (TERM-gated): used by the segment renderer (D-006 colors).
+export const seg = makePalette(segmentColorMode);
 
 // ---------------------------------------------------------------------------
 // OSC 8 hyperlinks (click targets on the status line, D-010)
@@ -152,13 +191,16 @@ const row = (left, right, width = COLUMNS()) => {
 /** @type {Readonly<Record<string, CommandHelpEntry>>} */
 export const COMMAND_HELP = Object.freeze({
   start: {
-    summary: 'Begin a focus block. Resets the cycle if idle, or starts the next phase.',
+    summary: 'Begin a focus block. All four durations are overridable per run.',
     usage: 'pomo start [mins] [-w N -s N -l N -f N] [-n N] [--mute] [-t "label"]',
     flags: [
-      { flag: '[mins]', desc: 'positional: focus minutes for this block (overrides -w)' },
-      { flag: '-w, --work N', desc: 'focus length in minutes (default 25)' },
-      { flag: '-s, --short N', desc: 'short-break length (default 5)' },
-      { flag: '-l, --long N', desc: 'long-break length (default 15)' },
+      {
+        flag: '[mins]',
+        desc: 'focus minutes, positional shorthand for -w (overrides -w)',
+      },
+      { flag: '-w, --work N', desc: 'focus block length in minutes (default 25)' },
+      { flag: '-s, --short N', desc: 'short break length in minutes (default 5)' },
+      { flag: '-l, --long N', desc: 'long break length in minutes (default 15)' },
       { flag: '-f, --frequency N', desc: 'focus blocks between long breaks (default 4)' },
       {
         flag: '-n, --notify N',
@@ -168,19 +210,26 @@ export const COMMAND_HELP = Object.freeze({
       { flag: '-t, --label TEXT', desc: 'label stamped on the completed record' },
     ],
     examples: [
-      { cmd: 'pomo start', desc: 'start a 25-minute focus block with defaults' },
+      {
+        cmd: 'pomo start',
+        desc: 'defaults: 25min focus, 5min short, 15min long, every 4',
+      },
+      { cmd: 'pomo start 50', desc: '50min focus, short/long/frequency unchanged' },
+      {
+        cmd: 'pomo start -s 10 -l 30',
+        desc: 'change break lengths only, keep 25min focus',
+      },
       {
         cmd: 'pomo start 50 -s 10 -l 30 -f 3',
-        desc: 'custom durations: 50/10/30, long break every 3',
+        desc: 'full custom: 50/10/30, long break every 3',
       },
-      { cmd: 'pomo start -t "write tests"', desc: 'labelled focus block' },
     ],
     notes: [
+      'All four durations (-w/-s/-l/-f) are fixed for the session. To change them, stop and start again.',
       'The label is stamped on the completed record, not on the live phase only.',
-      'Durations passed to start become the cadence for the whole cycle.',
       'A second start while one runs is rejected (one global timer, D-009).',
     ],
-    seeAlso: ['pause', 'extend', 'mode'],
+    seeAlso: ['pause', 'extend', 'stop', 'mode'],
   },
 
   pause: {

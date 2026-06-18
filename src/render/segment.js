@@ -15,16 +15,28 @@ import {
   overtimeSec,
   progressFraction,
 } from '../derive.js';
-import { ICONS, dim, bold, tomato, amber, teal, colorMode } from '../output.js';
+import { ICONS, seg, segmentColorMode } from '../output.js';
 
 // ---------------------------------------------------------------------------
 // Phase color selection
 // ---------------------------------------------------------------------------
 
 const phaseColor = (phase) => {
-  if (phase === 'focus') return tomato;
-  if (phase === 'long_break') return teal;
-  return amber; // short_break
+  if (phase === 'focus') return seg.tomato;
+  if (phase === 'long_break') return seg.teal;
+  return seg.amber; // short_break
+};
+
+/**
+ * Progress-bar fill color, keyed to run STATE rather than phase alone: red while
+ * focusing, yellow while paused (paused takes precedence over the phase), green
+ * while resting in either break. Paired with a dim track per D-006 (fill carries
+ * the color, the track recedes).
+ */
+export const barColor = (state) => {
+  if (state.run_state === 'paused') return seg.amber;
+  if (state.phase === 'focus') return seg.tomato;
+  return seg.grass; // short_break or long_break: resting
 };
 
 // ---------------------------------------------------------------------------
@@ -38,16 +50,30 @@ const FRAME_L = '▕';
 const FRAME_R = '▏';
 const BAR_WIDTH = 10;
 
-export const renderBar = (fraction) => {
+/**
+ * Render the sub-cell bar. `fillColor` tints the filled portion (the leading
+ * edge included); the frame and empty track stay dim (D-006). Defaults to no
+ * color so unit tests can assert on the raw glyphs/width.
+ *
+ * @param {number} fraction - 0..1 elapsed
+ * @param {(s: string) => string} [fillColor]
+ */
+export const renderBar = (fraction, fillColor = (s) => s) => {
   const quantized = Math.round(fraction * BAR_WIDTH * 8) / 8;
   const full = Math.floor(quantized);
   const eighth = Math.round((quantized - full) * 8);
 
   const filled = EIGHTHS[7].repeat(full);
   const partial = eighth > 0 ? EIGHTHS[eighth - 1] : '';
+  const fill = filled + partial;
   const empty = TRACK.repeat(Math.max(0, BAR_WIDTH - full - (partial ? 1 : 0)));
 
-  return `${FRAME_L}${filled}${partial}${empty}${FRAME_R}`;
+  return (
+    seg.dim(FRAME_L) +
+    (fill ? fillColor(fill) : '') +
+    (empty ? seg.dim(empty) : '') +
+    seg.dim(FRAME_R)
+  );
 };
 
 // ---------------------------------------------------------------------------
@@ -95,16 +121,17 @@ export const renderSegment = (state, prefs = {}, nowSec, columns = 80) => {
     timeParts.length === 2 ? `${timeParts[0]}${colonChar}${timeParts[1]}` : timeStr;
 
   const fraction = progressFraction(state, nowSec);
-  const bar = renderBar(fraction);
 
   // Build the segment progressively, dropping fields as width decreases (D-006)
-  const parts = [colorFn(icon), colorMode() ? bold(time) : time];
+  const parts = [colorFn(icon), segmentColorMode() ? seg.bold(time) : time];
 
-  if (columns >= 40) parts.push(dim(bar));
+  if (columns >= 40) parts.push(renderBar(fraction, barColor(state)));
 
+  // Text elements render at normal intensity (not dim), to match the prompt
+  // line's brightness; color is reserved as an accent on the icon and bar fill.
   if (view === 'classic' || view === 'full') {
     if (columns >= 52) {
-      parts.push(dim(renderDots(state.set_index, state.config?.frequency ?? 4)));
+      parts.push(renderDots(state.set_index, state.config?.frequency ?? 4));
     }
   }
 
@@ -114,7 +141,7 @@ export const renderSegment = (state, prefs = {}, nowSec, columns = 80) => {
       state.label.length > maxLabel
         ? state.label.slice(0, maxLabel - 1) + '…'
         : state.label;
-    parts.push(dim(label));
+    parts.push(label);
   }
 
   return parts.join(' ');

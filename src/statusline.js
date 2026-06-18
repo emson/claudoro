@@ -15,7 +15,7 @@ import { readState, readPrefs } from './store-read.js';
 import { renderSegment } from './render/segment.js';
 import { renderPassthrough } from './render/passthrough.js';
 import { nowEpoch, cuesDue } from './derive.js';
-import { colorMode } from './output.js';
+import { segmentColorMode } from './output.js';
 
 // Hard reset bracketing the whole line. The segment opens with a bare colour
 // (e.g. the tomato focus icon's `\x1b[38;5;203m`); without a leading reset that
@@ -23,7 +23,7 @@ import { colorMode } from './output.js';
 // Code's input cursor. A trailing reset alone is not enough — the leak is at the
 // leading edge. Only inject when colouring, so captured output stays clean (D-008).
 const RESET = '\x1b[0m';
-const emit = (line) => console.log(colorMode() ? `${RESET}${line}${RESET}` : line);
+const emit = (line) => console.log(segmentColorMode() ? `${RESET}${line}${RESET}` : line);
 
 /**
  * Main entry point — called by `bin/pomo.js` on the statusline fast path.

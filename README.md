@@ -94,12 +94,23 @@ existing status-line info (model · context% · git) is preserved alongside it, 
 
 ## Durations and cadence
 
-Classic Pomodoro defaults, all overridable per run (flags, not a config file):
+All four durations are overridable per run. Flags, not a config file:
+
+| Flag | Default | Controls |
+| ---- | ------- | -------- |
+| `-w, --work N` | 25 min | Focus block length |
+| `-s, --short N` | 5 min | Short break length |
+| `-l, --long N` | 15 min | Long break length |
+| `-f, --frequency N` | 4 | Focus blocks before a long break |
 
 ```bash
-pomo start                       # 25min focus, 5min short, 15min long, long break every 4
-pomo start 50 -s 10 -l 30 -f 3   # 50/10/30, long break after the 3rd focus
+pomo start                         # defaults: 25/5/15, long break every 4
+pomo start 50                      # 50min focus, short/long/frequency unchanged
+pomo start -s 10 -l 30             # change break lengths only, keep 25min focus
+pomo start 50 -s 10 -l 30 -f 3    # full custom: 50/10/30, long break after every 3
 ```
+
+Durations are fixed for the life of a session. To change them, `pomo stop` and start again with new flags.
 
 ## Transition modes
 

@@ -4,9 +4,15 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderSegment, renderBar, renderDots } from '../src/render/segment.js';
+import { renderSegment, renderBar, renderDots, barColor } from '../src/render/segment.js';
 import { renderPassthrough } from '../src/render/passthrough.js';
+import { seg } from '../src/output.js';
 import { makeRunningState, makeIdleState } from './helpers.js';
+
+// Force segment color off so structural assertions (widths, substrings) are
+// deterministic regardless of the test host's TERM. Individual tests that check
+// color flip CLAUDORO_COLOR locally (segmentColorMode reads it live).
+process.env.CLAUDORO_COLOR = 'never';
 
 const NOW = 1_000_000;
 const PREFS = { view: 'classic', motion: 'off' }; // motion off for stable test output
@@ -50,6 +56,62 @@ describe('M3: renderBar', () => {
     const bar = renderBar(0);
     assert.ok(!bar.includes('█'));
     assert.ok(bar.includes('░'));
+  });
+
+  it('applies the fill color to the filled portion only', () => {
+    const tag = (s) => `<${s}>`;
+    const bar = renderBar(0.5, tag);
+    // The 5 filled cells are wrapped; the dim track outside the tag is not.
+    assert.ok(bar.includes('<' + '█'.repeat(5) + '>'), `expected tagged fill in: ${bar}`);
+    assert.ok(bar.includes('░'), 'track still present');
+  });
+});
+
+describe('M3: barColor (focus red / paused yellow / resting green)', () => {
+  it('red while focusing', () => {
+    assert.equal(barColor(makeRunningState({ phase: 'focus' })), seg.tomato);
+  });
+
+  it('yellow while paused, regardless of phase', () => {
+    assert.equal(
+      barColor(makeRunningState({ run_state: 'paused', phase: 'focus' })),
+      seg.amber,
+    );
+    assert.equal(
+      barColor(makeRunningState({ run_state: 'paused', phase: 'short_break' })),
+      seg.amber,
+    );
+  });
+
+  it('green while resting in either break', () => {
+    assert.equal(barColor(makeRunningState({ phase: 'short_break' })), seg.grass);
+    assert.equal(barColor(makeRunningState({ phase: 'long_break' })), seg.grass);
+  });
+});
+
+describe('M3: segment color renders without a TTY (the bug fix)', () => {
+  it('emits ANSI when CLAUDORO_COLOR=always even though stdout is not a TTY', () => {
+    const prev = process.env.CLAUDORO_COLOR;
+    process.env.CLAUDORO_COLOR = 'always';
+    try {
+      // focus → tomato fill (38;5;203); short_break → grass fill (38;5;71)
+      const focus = renderSegment(makeRunningState({ phase: 'focus' }), PREFS, NOW, 80);
+      assert.ok(focus.includes('\x1b[38;5;203m'), `expected tomato in: ${focus}`);
+      const rest = renderSegment(
+        makeRunningState({ phase: 'short_break', planned_min: 5 }),
+        PREFS,
+        NOW,
+        80,
+      );
+      assert.ok(rest.includes('\x1b[38;5;71m'), `expected grass in: ${rest}`);
+    } finally {
+      process.env.CLAUDORO_COLOR = prev;
+    }
+  });
+
+  it('stays plain when CLAUDORO_COLOR=never', () => {
+    const seg2 = renderSegment(makeRunningState({ phase: 'focus' }), PREFS, NOW, 80);
+    assert.ok(!seg2.includes('\x1b['), `expected no ANSI in: ${seg2}`);
   });
 });
 
