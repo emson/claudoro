@@ -186,6 +186,28 @@ const cmdResume = async () => {
   console.log('Resumed.');
 };
 
+const cmdToggle = async () => {
+  const nowMs = Date.now();
+  const nowSec = Math.floor(nowMs / 1000);
+  const before = readState();
+  const { changed, state, prev } = await applyTransition((s) =>
+    T.toggle(s, { nowSec, nowMs }),
+  );
+  if (!changed) {
+    if (before.run_state === 'idle') {
+      console.log('Nothing running to toggle. Use `pomo start` to begin.');
+    }
+    return;
+  }
+  if (state.run_state === 'paused') {
+    cancelAlarm(prev.alarm_pid);
+    console.log('Paused.');
+  } else {
+    await reschedule(state, prev.alarm_pid);
+    console.log('Resumed.');
+  }
+};
+
 const cmdStop = async () => {
   const { changed, prev, record } = await applyTransition((s) => T.stop(s));
   if (!changed) return console.log('Nothing running.');
@@ -641,6 +663,7 @@ const VERBS = {
   start: cmdStart,
   pause: cmdPause,
   resume: cmdResume,
+  toggle: cmdToggle,
   stop: cmdStop,
   skip: cmdSkip,
   reset: cmdReset,

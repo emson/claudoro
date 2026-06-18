@@ -59,6 +59,36 @@ export const amber = (t) => wrap(C.coffee, t);
 export const teal = (t) => wrap(C.teal, t);
 
 // ---------------------------------------------------------------------------
+// OSC 8 hyperlinks (click targets on the status line, D-010)
+// ---------------------------------------------------------------------------
+
+// Like emoji, links do NOT require a TTY: Claude Code captures the status
+// line's stdout (so `isTTY()` is false) yet the host terminal renders the
+// hyperlink fine. Gate only on signals that predict a terminal that mangles
+// OSC 8 — `TERM=dumb` and an explicit opt-out — so the click target shows by
+// default. Set CLAUDORO_LINKS=never to force bare text; =always to force on.
+const supportsLinks = () => {
+  const pref = process.env.CLAUDORO_LINKS;
+  if (pref === 'always') return true;
+  if (pref === 'never') return false;
+  return process.env.TERM !== 'dumb';
+};
+
+const OSC8 = '\x1b]8;;';
+const ST = '\x1b\\'; // String Terminator: ESC \ (more robust than BEL through tmux)
+
+/**
+ * Wrap text in an OSC 8 hyperlink. Total + degrading: when links are off it
+ * returns the bare text, so a terminal that can't render OSC 8 never shows
+ * escape garbage on the status line (graceful-degradation invariant).
+ * @param {string} url   the target URI (e.g. `claudoro://toggle`)
+ * @param {string} text  the visible, already-styled link text
+ * @returns {string}
+ */
+export const osc8 = (url, text) =>
+  supportsLinks() ? `${OSC8}${url}${ST}${text}${OSC8}${ST}` : text;
+
+// ---------------------------------------------------------------------------
 // Phase icons (emoji with ASCII fallback for non-UTF8 terminals)
 // ---------------------------------------------------------------------------
 

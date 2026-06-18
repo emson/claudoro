@@ -66,6 +66,44 @@ describe('M2: pause / resume', () => {
   });
 });
 
+describe('M2: toggle (TEST-M2-004, D-010)', () => {
+  const MS = NOW * 1000;
+
+  it('pauses a running timer', () => {
+    const s = makeRunningState({ end_epoch: NOW + 100 });
+    const result = T.toggle(s, { nowSec: NOW, nowMs: MS });
+    assert.equal(result.state.run_state, 'paused');
+    assert.equal(result.state.paused_at, NOW);
+    assert.equal(result.state.last_toggle_ms, MS);
+  });
+
+  it('resumes a paused timer, shifting end_epoch by the paused span', () => {
+    const s = makeRunningState({
+      run_state: 'paused',
+      end_epoch: NOW + 100,
+      paused_at: NOW,
+    });
+    const result = T.toggle(s, { nowSec: NOW + 30, nowMs: MS + 30_000 });
+    assert.equal(result.state.run_state, 'running');
+    assert.equal(result.state.end_epoch, NOW + 130);
+    assert.equal(result.state.paused_total_sec, 30);
+  });
+
+  it('returns null when idle (nothing to toggle)', () => {
+    assert.equal(T.toggle(makeIdleState(), { nowSec: NOW, nowMs: MS }), null);
+  });
+
+  it('debounces a second toggle within the window (double-click is a no-op)', () => {
+    const s = makeRunningState({ end_epoch: NOW + 100, last_toggle_ms: MS });
+    const within = T.toggle(s, { nowSec: NOW, nowMs: MS + T.TOGGLE_DEBOUNCE_MS - 1 });
+    assert.equal(within, null, 'a toggle inside the window is dropped');
+
+    const after = T.toggle(s, { nowSec: NOW, nowMs: MS + T.TOGGLE_DEBOUNCE_MS });
+    assert.ok(after, 'a toggle at/after the window takes effect');
+    assert.equal(after.state.run_state, 'paused');
+  });
+});
+
 describe('M2: stop', () => {
   it('returns idle state and a record with status=aborted', () => {
     const s = makeRunningState();

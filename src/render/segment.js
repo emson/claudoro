@@ -77,7 +77,6 @@ export const renderSegment = (state, prefs = {}, nowSec, columns = 80) => {
   if (state.run_state === 'idle') return '';
 
   const view = prefs.view ?? 'classic';
-  const motion = prefs.motion ?? 'full';
   const overtime = isOvertime(state, nowSec);
 
   const icon =

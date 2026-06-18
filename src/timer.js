@@ -88,6 +88,44 @@ export const resume = (state, opts = {}) => {
 };
 
 // ---------------------------------------------------------------------------
+// toggle (D-010): the click verb
+// ---------------------------------------------------------------------------
+
+// Drop a second toggle within this window so an accidental double-click is a
+// no-op rather than a pause→resume flip back to where you started (D-010).
+export const TOGGLE_DEBOUNCE_MS = 300;
+
+/**
+ * Pause if running, resume if paused. Pause↔resume only: never advances, starts,
+ * or stops, so a click is a predictable single button (D-010). A toggle within
+ * TOGGLE_DEBOUNCE_MS of the previous one is dropped; the prior timestamp is kept,
+ * so the window is always measured from the last toggle that actually took effect.
+ *
+ * Needs millisecond resolution for sub-second double-clicks, so it takes `nowMs`
+ * (the CLI reads the clock once at the boundary and passes it down). Returns null
+ * for idle (nothing to toggle) and for a debounced click; both are no-ops.
+ *
+ * @param {object} state
+ * @param {object} opts - { nowSec, nowMs }
+ * @returns {{ state: object } | null}
+ */
+export const toggle = (state, opts = {}) => {
+  const nowMs = opts.nowMs ?? Date.now();
+  const last = state.last_toggle_ms ?? null;
+  if (last != null && nowMs - last < TOGGLE_DEBOUNCE_MS) return null;
+
+  const inner =
+    state.run_state === 'running'
+      ? pause(state, opts)
+      : state.run_state === 'paused'
+        ? resume(state, opts)
+        : null;
+  if (!inner) return null; // idle: nothing to toggle
+
+  return { state: { ...inner.state, last_toggle_ms: nowMs } };
+};
+
+// ---------------------------------------------------------------------------
 // stop
 // ---------------------------------------------------------------------------
 
