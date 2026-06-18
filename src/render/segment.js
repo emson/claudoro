@@ -89,12 +89,7 @@ export const renderSegment = (state, prefs = {}, nowSec, columns = 80) => {
   const timeStr = (overtime ? '+' : '') + formatMMSS(Math.abs(remSec));
 
   const colorFn = phaseColor(state.phase);
-  const colonChar =
-    motion === 'full' && state.run_state === 'running'
-      ? nowSec % 2 === 0
-        ? ':'
-        : ' ' // blink
-      : ':'; // solid when paused or motion off
+  const colonChar = ':'; // solid separator; motion shows only in the countdown numbers
 
   const timeParts = timeStr.split(':');
   const time =

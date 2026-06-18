@@ -62,7 +62,17 @@ export const teal = (t) => wrap(C.teal, t);
 // Phase icons (emoji with ASCII fallback for non-UTF8 terminals)
 // ---------------------------------------------------------------------------
 
-const supportsEmoji = () => process.env.TERM !== 'dumb' && isTTY();
+// Emoji do NOT require a TTY: Claude Code captures the status line's stdout
+// (so `isTTY()` is false there) yet the host terminal renders emoji fine. Gate
+// only on signals that actually predict broken glyphs — `TERM=dumb` and an
+// explicit opt-out — so the tomato shows by default. Set CLAUDORO_EMOJI=never
+// to force the ASCII fallback ([F]/[S]/[L]/||); =always to force emoji on.
+const supportsEmoji = () => {
+  const pref = process.env.CLAUDORO_EMOJI;
+  if (pref === 'always') return true;
+  if (pref === 'never') return false;
+  return process.env.TERM !== 'dumb';
+};
 
 export const ICONS = {
   focus: () => (supportsEmoji() ? '🍅' : '[F]'),

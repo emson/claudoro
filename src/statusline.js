@@ -15,6 +15,15 @@ import { readState, readPrefs } from './store-read.js';
 import { renderSegment } from './render/segment.js';
 import { renderPassthrough } from './render/passthrough.js';
 import { nowEpoch, cuesDue } from './derive.js';
+import { colorMode } from './output.js';
+
+// Hard reset bracketing the whole line. The segment opens with a bare colour
+// (e.g. the tomato focus icon's `\x1b[38;5;203m`); without a leading reset that
+// foreground can bleed across the statusline→prompt boundary and tint Claude
+// Code's input cursor. A trailing reset alone is not enough — the leak is at the
+// leading edge. Only inject when colouring, so captured output stays clean (D-008).
+const RESET = '\x1b[0m';
+const emit = (line) => console.log(colorMode() ? `${RESET}${line}${RESET}` : line);
 
 /**
  * Main entry point — called by `bin/pomo.js` on the statusline fast path.
@@ -26,7 +35,7 @@ export const render = async () => {
   // Per-pane opt-out: export CLAUDORO_HIDE=1 in a shell to suppress the segment (D-009)
   if (process.env.CLAUDORO_HIDE) {
     const passthrough = renderPassthroughSafe(ccJson);
-    if (passthrough) console.log(passthrough);
+    if (passthrough) emit(passthrough);
     return;
   }
 
@@ -51,16 +60,16 @@ export const render = async () => {
     const passthrough = renderPassthroughSafe(ccJson, prefs.passthrough);
 
     if (segment && passthrough) {
-      console.log(`${segment}  ${passthrough}`);
+      emit(`${segment}  ${passthrough}`);
     } else if (segment) {
-      console.log(segment);
+      emit(segment);
     } else if (passthrough) {
-      console.log(passthrough);
+      emit(passthrough);
     }
   } catch {
     // Never crash the user's status line
     const passthrough = renderPassthroughSafe(ccJson);
-    if (passthrough) console.log(passthrough);
+    if (passthrough) emit(passthrough);
   }
 };
 
