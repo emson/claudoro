@@ -412,34 +412,77 @@ export const COMMAND_HELP = Object.freeze({
     seeAlso: ['mode', 'status'],
   },
 
-  label: {
-    summary: 'Set or update the label on the current running block at any time.',
+  note: {
+    summary:
+      'Append a note to the current block (additive). --set overwrites, --clear empties.',
     whenToUse:
-      'The user wants to record WHAT this block is about (for history, the status line, and grouping). Settable at any point during a running or paused block.',
-    usage: 'pomo label "TEXT"',
+      'The user wants to record WHAT this block is about, or add context as it evolves. ADDITIVE by default: each call appends to the existing label rather than replacing it, so notes accumulate over a session. Use --set only to overwrite wholesale.',
+    usage: 'pomo note "TEXT" [--set] [--clear]',
+    flags: [
+      { flag: '--set', desc: 'overwrite the label with TEXT instead of appending' },
+      { flag: '--clear', desc: 'empty the label' },
+    ],
     examples: [
+      { cmd: 'pomo note "auth work"', desc: 'set the note (label was empty)' },
       {
-        cmd: 'pomo label "review PR"',
-        desc: 'tag the running block (works mid-session)',
+        cmd: 'pomo note "debugging OAuth"',
+        desc: 'appends: "auth work debugging OAuth"',
       },
-      {
-        cmd: 'pomo label "auth #project-x #review"',
-        desc: 'add #tags so the block groups in reports',
-      },
-      { cmd: 'pomo label ""', desc: 'clear the label' },
+      { cmd: 'pomo note --set "fresh label"', desc: 'overwrite everything' },
+      { cmd: 'pomo note --clear', desc: 'empty the label' },
     ],
     notes: [
+      'Additive by default; `pomo label` is a back-compat alias for this command.',
       'Works at any point during a running or paused block, not only at start.',
+      'For #tags, prefer `pomo tag review` (quote-free, deduped) over typing "#" here (the shell treats an unquoted # as a comment).',
       'The label is stamped onto the completed record when the block ends.',
-      'Include #tags (e.g. "#project-x #coding") in the label: tooling groups records by parsing these tokens, no separate field needed.',
-      'To set a label from the start, use `pomo start -t "text"` instead.',
       'To annotate a block that has already completed, use `pomo log open`.',
     ],
     next: [
-      'Review labels and tags in history with `pomo log`.',
-      'Prefer labelling from the start next time: `pomo start -t "text"`.',
+      'Add structured tags with `pomo tag <name>`.',
+      'Review notes and tags in history with `pomo log`.',
+      'Set an initial note at start with `pomo start -t "text"`.',
     ],
-    seeAlso: ['start', 'log', 'status'],
+    seeAlso: ['tag', 'start', 'log', 'status'],
+  },
+
+  tag: {
+    summary: 'Add one or more #tags to the current block (quote-free, deduped).',
+    whenToUse:
+      'The user wants to categorise this block for later grouping/reports. Adds #tags to the label without touching existing prose. Quote-free: type the bare name, the verb adds the "#", normalises to #kebab-case, and skips tags already present.',
+    usage: 'pomo tag <name> [name...]',
+    examples: [
+      { cmd: 'pomo tag review', desc: 'append #review to the label' },
+      { cmd: 'pomo tag review project-x', desc: 'add #review and #project-x at once' },
+      { cmd: 'pomo tag "Code Review"', desc: 'normalises to #code-review' },
+      { cmd: 'pomo tag review', desc: 'again: no-op, already present (deduped)' },
+    ],
+    notes: [
+      'Tags live inside the same label field as #tokens; there is no separate tags field (derive, do not store, D-007).',
+      'Each argument becomes one tag; quote multi-word tags so they kebab-case together.',
+      'Reporting tools group records by parsing #tags from labels, which is why normalisation and dedupe matter.',
+    ],
+    next: [
+      'Add free-text context with `pomo note "text"`.',
+      'See tagged history with `pomo log` (use --json to group).',
+    ],
+    seeAlso: ['note', 'log', 'status'],
+  },
+
+  label: {
+    summary: 'Alias for `pomo note` (additive). See `pomo help note`.',
+    whenToUse:
+      'Back-compat alias for `note`. Behaves identically: additive by default, --set overwrites, --clear empties. Prefer `pomo note` and `pomo tag` in new usage.',
+    usage: 'pomo label "TEXT" [--set] [--clear]',
+    examples: [
+      { cmd: 'pomo label "review PR"', desc: 'append to the label (same as note)' },
+      { cmd: 'pomo label --set "x"', desc: 'overwrite' },
+    ],
+    notes: [
+      'Identical to `pomo note`; kept so existing muscle memory and scripts keep working.',
+    ],
+    next: ['Use `pomo note` for prose and `pomo tag` for #tags.'],
+    seeAlso: ['note', 'tag', 'log'],
   },
 
   mute: {

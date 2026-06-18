@@ -40,6 +40,7 @@ import {
   isTTY,
 } from './output.js';
 import { remaining, formatMMSS, nowEpoch, foldRecords, deriveCadence } from './derive.js';
+import { appendText, addTags } from './label.js';
 import { setup, uninstall } from './setup.js';
 import { render as renderStatusline } from './statusline.js';
 
@@ -351,19 +352,62 @@ const cmdView = async ({ positional, flags }) => {
   else console.log(`View set to '${value}'.`);
 };
 
-const cmdLabel = async ({ positional }) => {
-  const label = positional.join(' ');
-  if (!label) {
-    console.log('Usage: pomo label "your label"');
-    return;
-  }
+// `note` is additive by default: it APPENDS to the current label (prose or
+// quoted #tags). --set overwrites, --clear empties. `label` is a back-compat
+// alias for the same handler. Tag-aware sugar lives in `cmdTag`.
+const cmdNote = async ({ positional, flags }) => {
+  const text = positional.join(' ').trim();
   const state = readState();
   if (state.run_state === 'idle') {
-    console.log('No active block. Label will apply on next start.');
+    console.log('No active block. Start one first with `pomo start`.');
     return;
   }
-  await mutateState((s) => ({ ...s, label }));
-  console.log(`Label set to "${label}".`);
+
+  if (flags.clear) {
+    await mutateState((s) => ({ ...s, label: null }));
+    console.log('Label cleared.');
+    return;
+  }
+
+  if (flags.set) {
+    await mutateState((s) => ({ ...s, label: text || null }));
+    console.log(text ? `Label set to "${text}".` : 'Label cleared.');
+    return;
+  }
+
+  if (!text) {
+    console.log('Usage: pomo note "text"   (--set overwrites, --clear empties)');
+    return;
+  }
+
+  const updated = await mutateState((s) => ({ ...s, label: appendText(s.label, text) }));
+  console.log(`Label: "${updated.label}".`);
+};
+
+// `tag` adds one or more #tags to the current label: quote-free (no shell-`#`
+// footgun), normalised to #kebab-case, and deduped against tags already present.
+const cmdTag = async ({ positional }) => {
+  const state = readState();
+  if (state.run_state === 'idle') {
+    console.log('No active block. Start one first with `pomo start`.');
+    return;
+  }
+  if (positional.length === 0) {
+    console.log('Usage: pomo tag <name> [name...]   (e.g. pomo tag review project-x)');
+    return;
+  }
+
+  let added = [];
+  const updated = await mutateState((s) => {
+    const result = addTags(s.label, positional);
+    added = result.added;
+    return { ...s, label: result.label };
+  });
+  if (added.length === 0) {
+    console.log('Already tagged; nothing added.');
+    return;
+  }
+  console.log(`Tagged ${added.join(' ')} -> "${updated.label}".`);
 };
 
 const cmdMute = async ({ positional }) => {
@@ -672,7 +716,9 @@ const VERBS = {
   extend: cmdExtend,
   mode: cmdMode,
   view: cmdView,
-  label: cmdLabel,
+  note: cmdNote,
+  tag: cmdTag,
+  label: cmdNote, // back-compat alias for `note`
   mute: cmdMute,
   unmute: (ctx) => cmdMute({ ...ctx, positional: ['unmute'] }),
   status: cmdStatus,
