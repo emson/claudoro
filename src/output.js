@@ -360,14 +360,23 @@ export const COMMAND_HELP = Object.freeze({
   },
 
   label: {
-    summary: 'Set the label for the current session.',
+    summary: 'Set or update the label on the current running block at any time.',
     usage: 'pomo label "TEXT"',
     examples: [
-      { cmd: 'pomo label "review PR"', desc: 'tag the current focus block' },
+      {
+        cmd: 'pomo label "review PR"',
+        desc: 'tag the running block (works mid-session)',
+      },
+      { cmd: 'pomo label "auth + debugging OAuth"', desc: 'update it as scope changes' },
       { cmd: 'pomo label ""', desc: 'clear the label' },
     ],
-    notes: ['The label is stamped onto each completed record while it is set (D-007).'],
-    seeAlso: ['start', 'status'],
+    notes: [
+      'Works at any point during a running or paused block, not only at start.',
+      'The label is stamped onto the completed record when the block ends.',
+      'To set a label from the start, use `pomo start -t "text"` instead.',
+      'To annotate a block that has already completed, use `pomo log open`.',
+    ],
+    seeAlso: ['start', 'log', 'status'],
   },
 
   mute: {
@@ -413,18 +422,24 @@ export const COMMAND_HELP = Object.freeze({
       { flag: '--today', desc: 'records for today (default)' },
       { flag: '-d, --date DATE', desc: 'records for a given day (YYYY-MM-DD)' },
       { flag: '--json', desc: 'records as a JSON array' },
-      { flag: 'open', desc: "open today's log file in $EDITOR" },
+      {
+        flag: 'open',
+        desc: 'open today\'s log in $EDITOR; edit the "label" field to annotate past records',
+      },
       { flag: 'backups', desc: 'list available backups with ids and timestamps' },
     ],
     examples: [
       { cmd: 'pomo log', desc: "today's completed phases" },
       { cmd: 'pomo log --date 2026-06-10', desc: 'a specific day' },
+      { cmd: 'pomo log open', desc: 'edit the raw JSONL to annotate completed records' },
       { cmd: 'pomo log backups', desc: 'show restore points' },
     ],
     notes: [
+      'To annotate a running block at any time, use `pomo label "text"`: it updates the live label and stamps it on the completed record.',
+      'To annotate a completed record, use `pomo log open` and edit the "label" field. Run `pomo log backups` first as a safety net.',
       'History is folded from immutable JSONL records; counts are derived on read.',
     ],
-    seeAlso: ['status', 'undo', 'restore'],
+    seeAlso: ['label', 'status', 'undo', 'restore'],
   },
 
   undo: {
