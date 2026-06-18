@@ -113,7 +113,10 @@ export const renderSegment = (state, prefs = {}, nowSec, columns = 80) => {
   const remSec = overtime ? -overtimeSec(state, nowSec) : (remaining(state, nowSec) ?? 0);
   const timeStr = (overtime ? '+' : '') + formatMMSS(Math.abs(remSec));
 
-  const colorFn = phaseColor(state.phase);
+  // Paused takes precedence over the phase: the icon goes amber (yellow) to
+  // match the paused bar fill (barColor), so a paused focus block never shows
+  // the focus red. Pause recedes (D-006).
+  const colorFn = state.run_state === 'paused' ? seg.amber : phaseColor(state.phase);
   const colonChar = ':'; // solid separator; motion shows only in the countdown numbers
 
   const timeParts = timeStr.split(':');
