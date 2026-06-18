@@ -180,11 +180,13 @@ const row = (left, right, width = COLUMNS()) => {
 /**
  * @typedef {object} CommandHelpEntry
  * @property {string} summary       one-line description
+ * @property {string} [whenToUse]   agent-facing decision cue: WHEN/WHY to pick this verb
  * @property {string} usage         usage pattern
  * @property {string[]} [aliases]   alternative spellings handled by this page
  * @property {CommandHelpFlag[]} [flags]  flag/arg table rows
  * @property {CommandHelpExample[]} examples  2-3 concrete examples
  * @property {string[]} [notes]     bullet notes (non-obvious WHY / gotchas)
+ * @property {string[]} [next]      forward-priming follow-on actions (what an agent does after)
  * @property {string[]} [seeAlso]   related verbs
  */
 
@@ -192,6 +194,8 @@ const row = (left, right, width = COLUMNS()) => {
 export const COMMAND_HELP = Object.freeze({
   start: {
     summary: 'Begin a focus block. All four durations are overridable per run.',
+    whenToUse:
+      'The user wants to start focusing or begin a pomodoro cycle. Only valid when the timer is idle; if a block already runs, start is rejected (use extend/reset/stop instead).',
     usage: 'pomo start [mins] [-w N -s N -l N -f N] [-n N] [--mute] [-t "label"]',
     flags: [
       {
@@ -207,7 +211,10 @@ export const COMMAND_HELP = Object.freeze({
         desc: 'warning cue N minutes before phase end (default 1)',
       },
       { flag: '--mute', desc: 'start with sound off for this run' },
-      { flag: '-t, --label TEXT', desc: 'label stamped on the completed record' },
+      {
+        flag: '-t, --label TEXT',
+        desc: 'label stamped on the completed record (supports #tags for grouping)',
+      },
     ],
     examples: [
       {
@@ -220,95 +227,134 @@ export const COMMAND_HELP = Object.freeze({
         desc: 'change break lengths only, keep 25min focus',
       },
       {
-        cmd: 'pomo start 50 -s 10 -l 30 -f 3',
-        desc: 'full custom: 50/10/30, long break every 3',
+        cmd: 'pomo start -t "auth #project-x #coding"',
+        desc: 'labelled with #tags so sessions group later',
       },
     ],
     notes: [
       'All four durations (-w/-s/-l/-f) are fixed for the session. To change them, stop and start again.',
-      'The label is stamped on the completed record, not on the live phase only.',
+      'Prefer setting -t at start: it labels every record in the cycle and primes future grouping.',
       'A second start while one runs is rejected (one global timer, D-009).',
+    ],
+    next: [
+      'Confirm it began with `pomo status`.',
+      'Adjust on the fly: `pomo pause` (interruption), `pomo extend` (in flow), `pomo skip` (done early).',
+      'Wrong durations? `pomo stop` then start again with new flags.',
     ],
     seeAlso: ['pause', 'extend', 'stop', 'mode'],
   },
 
   pause: {
     summary: 'Pause the running block. The countdown freezes; the alarm is cancelled.',
+    whenToUse:
+      'The user is stepping away briefly but intends to resume THIS block (call, interruption). Choose pause over stop when the work is not finished.',
     usage: 'pomo pause',
     examples: [{ cmd: 'pomo pause', desc: 'freeze the current phase' }],
     notes: [
       'Remaining time is preserved; resume continues from where it stopped.',
       'Works from any session (one global timer).',
     ],
+    next: [
+      'Resume with `pomo resume` when the user returns.',
+      'If they are actually done, `pomo stop` instead.',
+    ],
     seeAlso: ['resume', 'stop'],
   },
 
   resume: {
     summary: 'Resume a paused block from where it stopped.',
+    whenToUse: 'A block is paused and the user is ready to continue it.',
     usage: 'pomo resume',
     examples: [{ cmd: 'pomo resume', desc: 'continue the paused phase' }],
     notes: [
       'The end time is recomputed from now plus the remaining minutes; the alarm is rescheduled.',
     ],
+    next: ['Check time left with `pomo status`.'],
     seeAlso: ['pause'],
   },
 
   stop: {
     summary: 'Stop the timer and return to idle. The current phase is not counted.',
+    whenToUse:
+      'The user is finished and wants the timer cleared. WARNING: the current phase is discarded, not counted. To count it first, run skip before stop.',
     usage: 'pomo stop',
     examples: [{ cmd: 'pomo stop', desc: 'end the session, clear the live timer' }],
     notes: [
       'Stop does not finalize the current phase as completed; use skip to count it.',
       'Any pending alarm is cancelled and the detached one-shot is reaped.',
     ],
+    next: [
+      'To record the current phase before ending, `pomo skip` first, then stop.',
+      'Begin again later with `pomo start`.',
+    ],
     seeAlso: ['skip', 'reset'],
   },
 
   skip: {
     summary: 'Finish the current phase early and advance to the next.',
+    whenToUse:
+      'The user finished early and wants to move on AND keep the phase in history. Unlike stop, skip counts the phase.',
     usage: 'pomo skip',
     examples: [{ cmd: 'pomo skip', desc: 'finalize current phase, move on' }],
     notes: [
       'The current phase is finalized as skipped in the log (it still appears in history).',
       'In manual/balanced modes this advances past a waiting boundary too.',
     ],
+    next: [
+      'See the new phase with `pomo status`.',
+      'Skipped by accident? `pomo back` reverts within ~2 minutes.',
+    ],
     seeAlso: ['next', 'back'],
   },
 
   reset: {
     summary: 'Restart the current phase from its full duration, keeping cycle position.',
+    whenToUse:
+      'The user lost the start of the current phase (distraction, false start) and wants its clock restarted without disturbing the cycle count.',
     usage: 'pomo reset',
     examples: [{ cmd: 'pomo reset', desc: 'start the current phase over' }],
     notes: [
       'Cycle position and completed counts are unchanged; only the current clock restarts.',
     ],
+    next: ['Confirm the fresh clock with `pomo status`.'],
     seeAlso: ['skip', 'stop'],
   },
 
   next: {
     summary: 'Advance a waiting boundary (manual / balanced mode).',
+    whenToUse:
+      'A boundary is WAITING for confirmation (balanced/manual mode, shown as overtime in status) and the user is ready to enter the next phase. A no-op in auto mode.',
     usage: 'pomo next',
     examples: [{ cmd: 'pomo next', desc: 'step into the next phase now' }],
     notes: [
       'Only meaningful when a boundary is waiting for confirmation (modes balanced/manual, D-006a).',
       'In auto mode transitions happen on their own, so next is usually a no-op.',
     ],
+    next: [
+      'Advanced too soon? `pomo back` reverts within the window.',
+      'Change how boundaries behave with `pomo mode`.',
+    ],
     seeAlso: ['mode', 'skip'],
   },
 
   back: {
     summary: 'Undo the last phase transition within a short window (default 2 min).',
+    whenToUse:
+      'A transition just happened (often an auto-advance into a break) and the user wants to revert to the previous phase. Only works within ~2 minutes of the transition.',
     usage: 'pomo back',
     examples: [{ cmd: 'pomo back', desc: 'return to the prior phase if just advanced' }],
     notes: [
       'If an auto-advance dropped you into a break, back returns to the preceding focus phase.',
       'Only works inside the back-window (default 2 minutes after the transition).',
     ],
+    next: ['Re-advance when ready with `pomo next` or `pomo skip`.'],
     seeAlso: ['next', 'skip'],
   },
 
   extend: {
     summary: 'Add minutes to the current phase without breaking the cycle.',
+    whenToUse:
+      'The user is in flow and wants more time on the CURRENT phase. Prefer extend over reset/restart: it keeps elapsed time and the cycle intact.',
     usage: 'pomo extend [N]',
     flags: [{ flag: '[N]', desc: 'minutes to add (default 5)' }],
     examples: [
@@ -318,11 +364,14 @@ export const COMMAND_HELP = Object.freeze({
     notes: [
       'The end time moves later and the alarm is rescheduled so it still fires on time.',
     ],
+    next: ['Verify the new end time with `pomo status`.'],
     seeAlso: ['start', 'reset'],
   },
 
   mode: {
     summary: 'Get or set the phase transition mode.',
+    whenToUse:
+      'The user wants to control whether phases auto-advance. Read it first (no argument) before changing, so you report the current value.',
     usage: 'pomo mode [auto|balanced|manual] [--json]',
     flags: [
       { flag: 'auto', desc: 'transitions advance automatically (default)' },
@@ -337,11 +386,14 @@ export const COMMAND_HELP = Object.freeze({
     notes: [
       'With no argument it prints the current mode; with an argument it sets it (D-006a).',
     ],
+    next: ['In balanced/manual, advance a waiting boundary with `pomo next`.'],
     seeAlso: ['next', 'view'],
   },
 
   view: {
     summary: 'Get or set the status-line layout.',
+    whenToUse:
+      'The user wants more or less detail in the status line. Display-only; it never changes timing. Read first (no argument) to report the current layout.',
     usage: 'pomo view [minimal|classic|full] [--json]',
     flags: [
       { flag: 'minimal', desc: 'icon + time only' },
@@ -356,42 +408,57 @@ export const COMMAND_HELP = Object.freeze({
     notes: [
       'The view is a display preference only; it never changes timer state (D-004).',
     ],
+    next: ['See the same data in chat with `pomo status`.'],
     seeAlso: ['mode', 'status'],
   },
 
   label: {
     summary: 'Set or update the label on the current running block at any time.',
+    whenToUse:
+      'The user wants to record WHAT this block is about (for history, the status line, and grouping). Settable at any point during a running or paused block.',
     usage: 'pomo label "TEXT"',
     examples: [
       {
         cmd: 'pomo label "review PR"',
         desc: 'tag the running block (works mid-session)',
       },
-      { cmd: 'pomo label "auth + debugging OAuth"', desc: 'update it as scope changes' },
+      {
+        cmd: 'pomo label "auth #project-x #review"',
+        desc: 'add #tags so the block groups in reports',
+      },
       { cmd: 'pomo label ""', desc: 'clear the label' },
     ],
     notes: [
       'Works at any point during a running or paused block, not only at start.',
       'The label is stamped onto the completed record when the block ends.',
+      'Include #tags (e.g. "#project-x #coding") in the label: tooling groups records by parsing these tokens, no separate field needed.',
       'To set a label from the start, use `pomo start -t "text"` instead.',
       'To annotate a block that has already completed, use `pomo log open`.',
+    ],
+    next: [
+      'Review labels and tags in history with `pomo log`.',
+      'Prefer labelling from the start next time: `pomo start -t "text"`.',
     ],
     seeAlso: ['start', 'log', 'status'],
   },
 
   mute: {
     summary: 'Turn the end and warning cues off.',
+    whenToUse:
+      'The user wants silence (meeting, deep focus) but still wants the visual countdown. Global, not per session.',
     usage: 'pomo mute',
     examples: [{ cmd: 'pomo mute', desc: 'silence all cues' }],
     notes: [
       'Mute is global state, not per session; unmute reverses it.',
       'Visual cues in the status line still update when muted.',
     ],
+    next: ['Re-enable sound with `pomo unmute`.'],
     seeAlso: ['unmute', 'start'],
   },
 
   unmute: {
     summary: 'Turn the cues back on.',
+    whenToUse: 'Sound was muted and the user wants audible cues back.',
     usage: 'pomo unmute',
     examples: [{ cmd: 'pomo unmute', desc: 're-enable sound' }],
     seeAlso: ['mute'],
@@ -399,29 +466,37 @@ export const COMMAND_HELP = Object.freeze({
 
   status: {
     summary: 'Print rich current status into the conversation.',
+    whenToUse:
+      'You (the agent) need the current timer state to answer the user or decide a next action. This is the primary READ verb: run it before acting, and use --json to parse reliably.',
     usage: 'pomo status [--json]',
     flags: [
       { flag: '--json', desc: 'machine-readable status object (schema-versioned)' },
     ],
     examples: [
       { cmd: 'pomo status', desc: 'pretty multi-line status block' },
-      { cmd: 'pomo status --json', desc: 'stable JSON for scripts' },
+      { cmd: 'pomo status --json', desc: 'stable JSON for scripts and agents' },
     ],
     notes: [
       'Shows phase, time remaining, cycle position, label, mode, mute, and today stats.',
       'Today stats (completed blocks, focus minutes) are derived from the log, not stored (D-007).',
+    ],
+    next: [
+      'Act on the state: `pomo pause`, `pomo extend`, `pomo skip`, `pomo stop`.',
+      'Drill into past sessions with `pomo log`.',
     ],
     seeAlso: ['log', 'view'],
   },
 
   log: {
     summary: 'Show session history, open the log, or list backups.',
+    whenToUse:
+      'The user asks about past sessions, productivity, or wants to annotate/edit history. Use --json to aggregate or group records (e.g. by #tags in labels).',
     usage:
       'pomo log [--today | --date YYYY-MM-DD] [--json]   |   pomo log open   |   pomo log backups',
     flags: [
       { flag: '--today', desc: 'records for today (default)' },
       { flag: '-d, --date DATE', desc: 'records for a given day (YYYY-MM-DD)' },
-      { flag: '--json', desc: 'records as a JSON array' },
+      { flag: '--json', desc: 'records as a JSON array (parse #tags from labels here)' },
       {
         flag: 'open',
         desc: 'open today\'s log in $EDITOR; edit the "label" field to annotate past records',
@@ -431,19 +506,25 @@ export const COMMAND_HELP = Object.freeze({
     examples: [
       { cmd: 'pomo log', desc: "today's completed phases" },
       { cmd: 'pomo log --date 2026-06-10', desc: 'a specific day' },
+      { cmd: 'pomo log --json', desc: 'machine-readable records for grouping/reports' },
       { cmd: 'pomo log open', desc: 'edit the raw JSONL to annotate completed records' },
-      { cmd: 'pomo log backups', desc: 'show restore points' },
     ],
     notes: [
       'To annotate a running block at any time, use `pomo label "text"`: it updates the live label and stamps it on the completed record.',
       'To annotate a completed record, use `pomo log open` and edit the "label" field. Run `pomo log backups` first as a safety net.',
       'History is folded from immutable JSONL records; counts are derived on read.',
     ],
+    next: [
+      'Remove mis-logged records with `pomo undo` (backs up first).',
+      'Reverse an undo or a bad edit with `pomo restore`.',
+    ],
     seeAlso: ['label', 'status', 'undo', 'restore'],
   },
 
   undo: {
     summary: 'Remove the last N completed records, backing up first.',
+    whenToUse:
+      'The user wants to remove recent records (mis-logged, test runs, a wrong day). DESTRUCTIVE: always run --dry-run first, show the user exactly what would go, get explicit confirmation, then re-run with --yes (D-007).',
     usage: 'pomo undo [N] [--today] [--dry-run] [--yes]',
     flags: [
       { flag: '[N]', desc: 'number of records to remove (default 1)' },
@@ -453,7 +534,10 @@ export const COMMAND_HELP = Object.freeze({
       { flag: '--json', desc: 'report the removed records as JSON' },
     ],
     examples: [
-      { cmd: 'pomo undo --dry-run', desc: 'preview the last record removal' },
+      {
+        cmd: 'pomo undo --dry-run',
+        desc: 'preview the last record removal (do this first)',
+      },
       { cmd: 'pomo undo 2 --yes', desc: 'remove the last two records, no prompt' },
       {
         cmd: 'pomo undo --today --yes',
@@ -466,39 +550,54 @@ export const COMMAND_HELP = Object.freeze({
       '--today removes every record for today (focus and breaks), not just completed focus.',
       'Without --yes on a TTY you are prompted to confirm.',
     ],
+    next: [
+      'Verify the result with `pomo log`.',
+      'Made a mistake? Reverse it with `pomo restore <backup-id>` (the id is printed after undo).',
+    ],
     seeAlso: ['restore', 'log'],
   },
 
   restore: {
     summary: 'Restore the log from a backup; with no id, list backups.',
+    whenToUse:
+      'The user wants to reverse an undo or a manual log edit. Run with no id first to list available backups, then restore the chosen one.',
     usage: 'pomo restore [backup-id]',
     flags: [
       { flag: '[backup-id]', desc: 'backup to restore (omit to list available backups)' },
       { flag: '--json', desc: 'report the result as JSON' },
     ],
     examples: [
-      { cmd: 'pomo restore', desc: 'list available backups' },
+      { cmd: 'pomo restore', desc: 'list available backups (do this first)' },
       { cmd: 'pomo restore 2026-06-17T09-30-00', desc: 'restore that backup' },
     ],
     notes: [
       'Restore reverses an undo or edit; the current log is itself backed up first.',
     ],
+    next: ['Confirm the restored history with `pomo log`.'],
     seeAlso: ['undo', 'log'],
   },
 
   setup: {
     summary: 'Wire Claudoro into Claude Code (idempotent).',
+    whenToUse:
+      'First-time install, or re-wiring after an upgrade moved the binary. Safe to run repeatedly.',
     usage: 'pomo setup',
     examples: [{ cmd: 'pomo setup', desc: 'install command file, statusLine, hooks' }],
     notes: [
       'Preserves your existing status line (model, context, git) by composing, not clobbering (D-005).',
       'Safe to run repeatedly; a manifest records exactly what was added.',
     ],
+    next: [
+      'Start your first block with `pomo start`.',
+      'Remove everything later with `pomo uninstall`.',
+    ],
     seeAlso: ['uninstall'],
   },
 
   uninstall: {
     summary: 'Reverse setup and remove all Claudoro wiring.',
+    whenToUse:
+      'The user wants Claudoro removed from Claude Code, restoring their prior status line.',
     usage: 'pomo uninstall',
     examples: [
       { cmd: 'pomo uninstall', desc: 'restore prior status line, remove hooks' },
@@ -506,16 +605,20 @@ export const COMMAND_HELP = Object.freeze({
     notes: [
       'Restores the previous status line from backup and leaves no orphaned processes (D-005).',
     ],
+    next: ['Reinstall any time with `pomo setup`.'],
     seeAlso: ['setup'],
   },
 
   help: {
     summary: 'Show all commands, or detail for one command.',
+    whenToUse:
+      "You are unsure which verb fits, or need a verb's flags and follow-on actions. Run `pomo help <verb>` for a detail page with WHEN TO USE and NEXT sections.",
     usage: 'pomo help [command]',
     examples: [
       { cmd: 'pomo help', desc: 'the full command index' },
       { cmd: 'pomo help start', desc: 'this style of detail page' },
     ],
+    next: ['Pick the right verb and run it; each detail page lists likely next actions.'],
     seeAlso: [],
   },
 });
@@ -529,6 +632,10 @@ const headerSection = (key, e) => [
   bold(tomato(`pomo ${key}`)) + '  ' + dim(e.summary),
   '',
 ];
+
+/** @param {CommandHelpEntry} e @returns {string[]} */
+const whenToUseSection = (e) =>
+  !e.whenToUse ? [] : [bold('WHEN TO USE'), '  ' + e.whenToUse, ''];
 
 /** @param {CommandHelpEntry} e @returns {string[]} */
 const usageSection = (e) => [bold('USAGE'), '  ' + e.usage, ''];
@@ -547,6 +654,10 @@ const examplesSection = (e) => [
 /** @param {CommandHelpEntry} e @returns {string[]} */
 const notesSection = (e) =>
   !e.notes?.length ? [] : [bold('NOTES'), ...e.notes.map((n) => '  - ' + n), ''];
+
+/** @param {CommandHelpEntry} e @returns {string[]} */
+const nextSection = (e) =>
+  !e.next?.length ? [] : [bold('NEXT'), ...e.next.map((n) => '  - ' + n), ''];
 
 /** @param {CommandHelpEntry} e @returns {string[]} */
 const seeAlsoSection = (e) =>
@@ -575,10 +686,12 @@ const renderCommandHelp = (topic, _prefs = {}) => {
 
   const lines = [
     ...headerSection(key, entry),
+    ...whenToUseSection(entry),
     ...usageSection(entry),
     ...flagsSection(entry),
     ...examplesSection(entry),
     ...notesSection(entry),
+    ...nextSection(entry),
     ...seeAlsoSection(entry),
   ];
 
