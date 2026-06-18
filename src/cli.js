@@ -20,8 +20,9 @@ import {
   findAllForToday,
   undoRecords,
   readTodayRecords,
-  readRecordsForDate,
   readAllRecords,
+  readRangeByDay,
+  listLogDates,
   listBackups,
   restoreBackup,
   ensureLogFile,
@@ -32,6 +33,8 @@ import {
   renderStatus,
   renderJson,
   renderLog,
+  renderLogSummary,
+  renderLogRecords,
   renderBackups,
   renderUndoPlan,
   renderUndoResult,
@@ -39,8 +42,16 @@ import {
   renderRestoreResult,
   isTTY,
 } from './output.js';
-import { remaining, formatMMSS, nowEpoch, foldRecords, deriveCadence } from './derive.js';
-import { appendText, addTags } from './label.js';
+import {
+  remaining,
+  formatMMSS,
+  nowEpoch,
+  foldRecords,
+  deriveCadence,
+  today,
+  shiftDate,
+} from './derive.js';
+import { appendText, addTags, parseTags, normalizeTag } from './label.js';
 import { setup, uninstall } from './setup.js';
 import { render as renderStatusline } from './statusline.js';
 
@@ -66,6 +77,14 @@ const FLAGS_WITH_VALUES = new Set([
   'date',
   'd',
   'timer',
+  // log range + filter selectors
+  'last',
+  'since',
+  'until',
+  'tag',
+  'phase',
+  'status',
+  'grep',
 ]);
 
 const SHORT = {
@@ -471,24 +490,110 @@ const cmdStatus = async ({ flags }) => {
 // ISO date validation pattern
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Default + --today + --date: list records for a given date. */
-const logList = async (flags) => {
-  if (flags.date && !ISO_DATE.test(flags.date)) {
-    console.error(`Invalid date '${flags.date}'. Expected YYYY-MM-DD.`);
+const badDate = (d) => {
+  console.error(`Invalid date '${d}'. Expected YYYY-MM-DD.`);
+  process.exit(1);
+};
+
+/**
+ * Resolve the range-selector flags to an inclusive [since, until] pair.
+ * At most one selector may be set; conflicts and bad input exit(1). Defaults to
+ * today. ISO date strings compare chronologically, so since <= until is lexical.
+ * @param {object} flags
+ * @returns {{ since: string, until: string }}
+ */
+const resolveRange = (flags) => {
+  const t = today();
+  const selectors = [
+    flags.today === true,
+    flags.date != null,
+    flags.last != null,
+    flags.all === true,
+    flags.since != null || flags.until != null,
+  ].filter(Boolean).length;
+  if (selectors > 1) {
+    console.error(
+      'Choose one range: --today | --date DATE | --last N | --since/--until | --all.',
+    );
     process.exit(1);
   }
-  const date =
-    typeof flags.date === 'string' && ISO_DATE.test(flags.date)
-      ? flags.date
-      : new Date().toISOString().slice(0, 10);
-  const records = readRecordsForDate(date);
-  const aggregates = foldRecords(records, date);
+
+  if (flags.all === true) {
+    const dates = listLogDates();
+    return { since: dates[0] ?? t, until: t };
+  }
+  if (flags.date != null) {
+    if (!ISO_DATE.test(flags.date)) badDate(flags.date);
+    return { since: flags.date, until: flags.date };
+  }
+  if (flags.last != null) {
+    const n = parseInt(flags.last, 10);
+    if (!Number.isInteger(n) || n < 1 || String(n) !== String(flags.last)) {
+      console.error('Usage: pomo log --last N   (N is a whole number >= 1)');
+      process.exit(1);
+    }
+    return { since: shiftDate(t, -(n - 1)), until: t };
+  }
+  if (flags.since != null || flags.until != null) {
+    const since = flags.since ?? t;
+    const until = flags.until ?? t;
+    if (!ISO_DATE.test(since)) badDate(since);
+    if (!ISO_DATE.test(until)) badDate(until);
+    if (since > until) {
+      console.error(`--since ${since} is after --until ${until}.`);
+      process.exit(1);
+    }
+    return { since, until };
+  }
+  return { since: t, until: t }; // default + --today
+};
+
+/** Narrow a record set by the filter flags (all compose, AND). */
+const applyFilters = (records, flags) => {
+  let out = records;
+  if (flags.tag != null) {
+    const want = normalizeTag(flags.tag);
+    out = out.filter((r) => want != null && parseTags(r.label).includes(want));
+  }
+  if (flags.focus === true) out = out.filter((r) => r.phase === 'focus');
+  if (typeof flags.phase === 'string') out = out.filter((r) => r.phase === flags.phase);
+  if (typeof flags.status === 'string')
+    out = out.filter((r) => r.status === flags.status);
+  if (typeof flags.grep === 'string') {
+    const q = flags.grep.toLowerCase();
+    out = out.filter((r) => (r.label ?? '').toLowerCase().includes(q));
+  }
+  return out;
+};
+
+/**
+ * List history. Default is today (record listing); range selectors widen it.
+ * Single day -> record listing; multi-day -> per-day summary, or full records
+ * with --records; --json always returns the flat filtered record array (the
+ * dashboard's feed). Filters (--tag/--focus/--phase/--status/--grep) compose.
+ */
+const logList = async (flags) => {
+  const { since, until } = resolveRange(flags);
+
+  const groups = readRangeByDay(since, until)
+    .map((g) => ({ date: g.date, records: applyFilters(g.records, flags) }))
+    .filter((g) => g.records.length > 0);
+  const flat = groups.flatMap((g) => g.records);
 
   if (flags.json) {
-    console.log(renderJson({ date, records, aggregates }));
-  } else {
-    console.log(renderLog(date, records, aggregates));
+    console.log(renderJson({ since, until, records: flat }));
+    return;
   }
+
+  if (since === until) {
+    const aggregates = foldRecords(flat, since);
+    console.log(renderLog(since, flat, aggregates));
+    return;
+  }
+
+  console.log(
+    flags.records ? renderLogRecords(groups) : renderLogSummary(groups, since, until),
+  );
 };
 
 /** List available backups. */

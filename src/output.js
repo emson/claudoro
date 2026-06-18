@@ -13,6 +13,7 @@ import {
   overtimeSec,
   progressFraction,
   nowEpoch,
+  summarize,
 } from './derive.js';
 
 // ---------------------------------------------------------------------------
@@ -539,15 +540,33 @@ export const COMMAND_HELP = Object.freeze({
   },
 
   log: {
-    summary: 'Show session history, open the log, or list backups.',
+    summary:
+      'Show session history. Defaults to today; range and filter flags widen and narrow it.',
     whenToUse:
-      'The user asks about past sessions, productivity, or wants to annotate/edit history. Use --json to aggregate or group records (e.g. by #tags in labels).',
+      'The user asks about past sessions or productivity over time. Default is today; use a range selector for more. Single day prints records; a multi-day range prints a per-day summary (add --records for full detail). Use --json for the flat record array (the dashboard feed).',
     usage:
-      'pomo log [--today | --date YYYY-MM-DD] [--json]   |   pomo log open   |   pomo log backups',
+      'pomo log [RANGE] [FILTER] [--records] [--json]   |   pomo log open   |   pomo log backups',
     flags: [
       { flag: '--today', desc: 'records for today (default)' },
-      { flag: '-d, --date DATE', desc: 'records for a given day (YYYY-MM-DD)' },
-      { flag: '--json', desc: 'records as a JSON array (parse #tags from labels here)' },
+      { flag: '-d, --date DATE', desc: 'a single day (YYYY-MM-DD)' },
+      {
+        flag: '--last N',
+        desc: 'the last N days, today inclusive (--last 7 = the week)',
+      },
+      {
+        flag: '--since DATE [--until DATE]',
+        desc: 'explicit range; --until defaults to today',
+      },
+      { flag: '--all', desc: 'every day on record' },
+      {
+        flag: '--records',
+        desc: 'multi-day: list every record, not just per-day totals',
+      },
+      { flag: '--tag NAME', desc: 'only records tagged #NAME (filter)' },
+      { flag: '--focus', desc: 'only focus blocks (filter)' },
+      { flag: '--status WORD', desc: 'completed | skipped | aborted | partial (filter)' },
+      { flag: '--grep TEXT', desc: 'only records whose label contains TEXT (filter)' },
+      { flag: '--json', desc: 'flat record array for the matched range + filters' },
       {
         flag: 'open',
         desc: 'open today\'s log in $EDITOR; edit the "label" field to annotate past records',
@@ -555,21 +574,32 @@ export const COMMAND_HELP = Object.freeze({
       { flag: 'backups', desc: 'list available backups with ids and timestamps' },
     ],
     examples: [
-      { cmd: 'pomo log', desc: "today's completed phases" },
-      { cmd: 'pomo log --date 2026-06-10', desc: 'a specific day' },
-      { cmd: 'pomo log --json', desc: 'machine-readable records for grouping/reports' },
-      { cmd: 'pomo log open', desc: 'edit the raw JSONL to annotate completed records' },
+      { cmd: 'pomo log', desc: "today's completed phases (default)" },
+      { cmd: 'pomo log --last 7', desc: 'the week, as a per-day summary' },
+      { cmd: 'pomo log --last 7 --records', desc: 'the week, every record listed' },
+      { cmd: 'pomo log --since 2026-06-01', desc: 'from a date through today' },
+      {
+        cmd: 'pomo log --all --tag project-x',
+        desc: 'all-time, only #project-x sessions',
+      },
+      {
+        cmd: 'pomo log --last 30 --json',
+        desc: 'a month of records for reports/grouping',
+      },
     ],
     notes: [
-      'To annotate a running block at any time, use `pomo label "text"`: it updates the live label and stamps it on the completed record.',
-      'To annotate a completed record, use `pomo log open` and edit the "label" field. Run `pomo log backups` first as a safety net.',
+      'At most one range selector (--today/--date/--last/--since/--all); combining them errors.',
+      'Filters compose (AND) and apply within the chosen range.',
+      'A range reads only days that exist on disk, so even --all stays cheap.',
+      'To annotate history, use `pomo note`/`pomo tag` on a running block, or `pomo log open` for completed records (run `pomo log backups` first).',
       'History is folded from immutable JSONL records; counts are derived on read.',
     ],
     next: [
+      'Narrow with a filter: `pomo log --last 7 --tag review`.',
+      'Export for a dashboard with `pomo log --all --json`.',
       'Remove mis-logged records with `pomo undo` (backs up first).',
-      'Reverse an undo or a bad edit with `pomo restore`.',
     ],
-    seeAlso: ['label', 'status', 'undo', 'restore'],
+    seeAlso: ['note', 'tag', 'status', 'undo', 'restore'],
   },
 
   undo: {
@@ -1050,6 +1080,67 @@ export const renderLog = (date, records, aggregates) => {
   const footer = dim(`total focus: ${formatFocus(aggregates.focusMinToday)}`);
 
   return [header, '', ...rows, '', footer].join('\n');
+};
+
+/** Sum a list of per-day groups into overall totals. */
+const rangeTotals = (groups) =>
+  groups.reduce(
+    (acc, g) => {
+      const s = summarize(g.records);
+      acc.completed += s.completed;
+      acc.focusMin += s.focusMin;
+      return acc;
+    },
+    { completed: 0, focusMin: 0 },
+  );
+
+/**
+ * Render a multi-day range as a per-day SUMMARY: one row per day
+ * (date, completed focus blocks, focus minutes) plus a grand total.
+ * @param {{date:string, records:object[]}[]} groups - non-empty days, ascending
+ * @param {string} since
+ * @param {string} until
+ * @returns {string}
+ */
+export const renderLogSummary = (groups, since, until) => {
+  if (!groups || groups.length === 0) return `No records for ${since} .. ${until}.`;
+
+  const header = bold(`${since} .. ${until}`);
+  const rows = groups.map((g) => {
+    const { completed, focusMin } = summarize(g.records);
+    return row(
+      g.date,
+      dim(`${plural(completed, 'block')}   ${formatFocus(focusMin)} focus`),
+    );
+  });
+  const { completed, focusMin } = rangeTotals(groups);
+  const footer = dim(
+    `Total: ${plural(completed, 'block')}, ${formatFocus(focusMin)} focus over ${plural(groups.length, 'day')}`,
+  );
+
+  return [header, '', ...rows, '', footer].join('\n');
+};
+
+/**
+ * Render a multi-day range as full RECORDS grouped by day, each day with its own
+ * sub-total, then a grand total. Used by `pomo log <range> --records`.
+ * @param {{date:string, records:object[]}[]} groups - non-empty days, ascending
+ * @returns {string}
+ */
+export const renderLogRecords = (groups) => {
+  if (!groups || groups.length === 0) return 'No records.';
+
+  const blocks = groups.map((g) => {
+    const { completed, focusMin } = summarize(g.records);
+    const head = `${bold(g.date)}  ${dim(`${plural(completed, 'block')}   ${formatFocus(focusMin)} focus`)}`;
+    return [head, ...g.records.map(renderLogRow)].join('\n');
+  });
+  const { completed, focusMin } = rangeTotals(groups);
+  const footer = dim(
+    `Total: ${plural(completed, 'block')}, ${formatFocus(focusMin)} focus over ${plural(groups.length, 'day')}`,
+  );
+
+  return [blocks.join('\n\n'), footer].join('\n\n');
 };
 
 /**

@@ -96,6 +96,23 @@ const refreshCadenceLocked = (env = process.env) => {
   writeState({ ...state, set_index: setIndex, set_number: setNumber }, env);
 };
 
+/**
+ * Read records grouped by day across an inclusive [since, until] ISO date range.
+ * Reads only files that actually exist (intersects the range with listLogDates),
+ * so an enormous range never iterates empty calendar days. Ascending by date;
+ * days with no records are omitted. ISO date strings sort chronologically, so
+ * lexical comparison is the range test.
+ * @param {string} since 'YYYY-MM-DD'
+ * @param {string} until 'YYYY-MM-DD'
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {{ date: string, records: object[] }[]}
+ */
+export const readRangeByDay = (since, until, env = process.env) =>
+  listLogDates(env)
+    .filter((date) => date >= since && date <= until)
+    .map((date) => ({ date, records: readRecordsForDate(date, env) }))
+    .filter((group) => group.records.length > 0);
+
 /** List all available log dates (sorted ascending). */
 export const listLogDates = (env = process.env) => {
   const { logsDir } = claudoroPaths(env);

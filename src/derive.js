@@ -168,6 +168,50 @@ export const deriveCadence = (records) => {
 };
 
 // ---------------------------------------------------------------------------
+// Date-bucket helpers
+// ---------------------------------------------------------------------------
+// These derive the calendar day in UTC, matching how log files are named
+// (todayLogFile). Range reads stay aligned with writes by sharing this. The
+// known quirk is that "today" is UTC, not local; fixing it is a one-line change
+// here plus the matching todayLogFile, tracked as a follow-up.
+
+/** Today's date bucket 'YYYY-MM-DD' (UTC, matching log file names). */
+export const today = () => new Date().toISOString().slice(0, 10);
+
+/** The date bucket for an epoch-seconds timestamp. */
+export const dateOf = (epochSec) => new Date(epochSec * 1000).toISOString().slice(0, 10);
+
+/**
+ * Shift an ISO date by `delta` calendar days (delta may be negative).
+ * Pure date arithmetic via UTC so it never drifts across DST.
+ * @param {string} isoDate 'YYYY-MM-DD'
+ * @param {number} delta
+ * @returns {string}
+ */
+export const shiftDate = (isoDate, delta) => {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+};
+
+/**
+ * Totals over an arbitrary record set, with no "today" coupling (unlike
+ * foldRecords). Used for multi-day range summaries.
+ * @param {object[]} records
+ * @returns {{ completed: number, focusMin: number, total: number }}
+ */
+export const summarize = (records) => {
+  let completed = 0;
+  let focusMin = 0;
+  for (const r of records) {
+    if (r.phase === 'focus' && r.status === 'completed') {
+      completed += 1;
+      focusMin += r.actual_min ?? r.planned_min ?? 0;
+    }
+  }
+  return { completed, focusMin, total: records.length };
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
