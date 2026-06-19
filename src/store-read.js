@@ -29,6 +29,7 @@ export const IDLE_STATE = Object.freeze({
   owner_session: null,
   alarms_fired: [],
   alarm_pid: null,
+  alarm_seq: 0,
   back_checkpoint: null,
   config: {
     work: 25,

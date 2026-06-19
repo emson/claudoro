@@ -60,7 +60,8 @@
  * @property {string|null} current_record_id
  * @property {string|null} owner_session
  * @property {Cue[]} alarms_fired             Cues already claimed this phase (atomic claim)
- * @property {number|null} alarm_pid          Detached one-shot PID (may be stale)
+ * @property {number|null} alarm_pid          Last-spawned worker PID — diagnostic only; control is by alarm_seq, never by killing this
+ * @property {number} alarm_seq               Monotonic alarm generation; only armAlarm increments it. A worker owns the alarm iff state.alarm_seq still equals the generation it was spawned with (D-009). Never reset by a transition or restored from a snapshot.
  * @property {BackCheckpoint|null} back_checkpoint  Pre-transition snapshot for `back`; null when none available
  * @property {Config} config
  */

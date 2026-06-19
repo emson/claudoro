@@ -259,8 +259,25 @@ export const restoreBackup = (backupId, env = process.env) => {
     // Write a safety backup of the current state before restoring
     writeBackup(env);
 
+    // The alarm generation must never go backward: a backup carries an old
+    // alarm_seq (and a long-dead alarm_pid), but a worker from the CURRENT timer
+    // may still be alive. Capture the live generation, restore the file, then
+    // re-base alarm_seq above both so the next armAlarm reliably supersedes any
+    // live worker (D-009). alarm_pid is cleared (it is diagnostic only).
+    const liveSeq = readState(env).alarm_seq ?? 0;
+
     const backupState = join(backupDir, 'state.json');
     if (existsSync(backupState)) copyFileSync(backupState, paths.stateFile);
+
+    const restored = readState(env);
+    writeState(
+      {
+        ...restored,
+        alarm_seq: Math.max(liveSeq, restored.alarm_seq ?? 0),
+        alarm_pid: null,
+      },
+      env,
+    );
 
     // Restore any JSONL files found in the backup
     const files = readdirSync(backupDir).filter((f) => f.endsWith('.jsonl'));

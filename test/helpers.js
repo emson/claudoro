@@ -48,6 +48,7 @@ export const makeRunningState = (overrides = {}) => ({
   owner_session: 'test-session',
   alarms_fired: [],
   alarm_pid: null,
+  alarm_seq: 0,
   config: { work: 25, short: 5, long: 15, frequency: 4, notify: 1, mute: false },
   ...overrides,
 });
@@ -69,6 +70,7 @@ export const makeIdleState = (overrides = {}) => ({
   owner_session: null,
   alarms_fired: [],
   alarm_pid: null,
+  alarm_seq: 0,
   config: { work: 25, short: 5, long: 15, frequency: 4, notify: 1, mute: false },
   ...overrides,
 });

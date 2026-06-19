@@ -45,6 +45,22 @@ export const cuesDue = (state, nowSec = nowEpoch()) => {
   return due;
 };
 
+/**
+ * True iff `state` still describes the exact phase-instance a detached alarm
+ * worker was armed for: same deadline AND same alarm generation (D-009).
+ *
+ * Worker ownership is the dual of the firing claim: the `alarms_fired` claim
+ * makes the *sound* single-fire; this makes the *process* single-owner. Every
+ * (re)arm bumps `alarm_seq`, so any superseded worker (replaced by a verb, a
+ * reconcile, a `back`, or a duplicate spawn) fails this check and exits on its
+ * own — no signal, no kill-by-pid, and therefore no orphaned process and no
+ * stale cue. Pure so the worker can use it without loading the alarm module.
+ */
+export const isAlarmOwner = (state, endEpoch, seq) =>
+  state.run_state === 'running' &&
+  state.end_epoch === endEpoch &&
+  (state.alarm_seq ?? 0) === seq;
+
 /** Zero-padded MM:SS string. Never reflowing (always 5 chars). */
 export const formatMMSS = (totalSec) => {
   const s = Math.abs(Math.round(totalSec));

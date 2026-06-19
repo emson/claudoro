@@ -32,7 +32,7 @@ import {
   restoreBackup,
   ensureLogFile,
 } from './history.js';
-import { scheduleAlarm, cancelAlarm, reconcileAndReschedule } from './alarm.js';
+import { armAlarm, reconcileAndReschedule } from './alarm.js';
 import {
   renderHelp,
   renderStatus,
@@ -142,18 +142,6 @@ export const parseArgs = (argv) => {
 // Verb handlers
 // ---------------------------------------------------------------------------
 
-/**
- * Cancel the prior phase's alarm (by its old PID), spawn a fresh one for the
- * new end_epoch if still running, and persist the new PID. Used by every verb
- * that changes when the current phase ends.
- */
-const reschedule = async (state, prevPid) => {
-  cancelAlarm(prevPid);
-  if (state.run_state !== 'running') return;
-  const pid = scheduleAlarm(state);
-  await mutateState((s) => ({ ...s, alarm_pid: pid }));
-};
-
 const cmdStart = async ({ positional, flags }) => {
   const mins =
     positional[0] && /^\d+$/.test(positional[0]) ? parseInt(positional[0], 10) : null;
@@ -195,23 +183,23 @@ const cmdStart = async ({ positional, flags }) => {
     return;
   }
 
-  await reschedule(state, null);
+  await armAlarm();
   console.log(
     `Started ${state.config.work}min focus block${label ? ` "${label}"` : ''}. Good luck.`,
   );
 };
 
 const cmdPause = async () => {
-  const { changed, prev } = await applyTransition((s) => T.pause(s));
+  const { changed } = await applyTransition((s) => T.pause(s));
   if (!changed) return console.log('Nothing running to pause.');
-  cancelAlarm(prev.alarm_pid);
+  await armAlarm(); // disarms: the bump retires the running worker, which self-exits
   console.log('Paused.');
 };
 
 const cmdResume = async () => {
-  const { changed, state, prev } = await applyTransition((s) => T.resume(s));
+  const { changed } = await applyTransition((s) => T.resume(s));
   if (!changed) return console.log('Not paused.');
-  await reschedule(state, prev.alarm_pid);
+  await armAlarm();
   console.log('Resumed.');
 };
 
@@ -219,29 +207,24 @@ const cmdToggle = async () => {
   const nowMs = Date.now();
   const nowSec = Math.floor(nowMs / 1000);
   const before = readState();
-  const { changed, state, prev } = await applyTransition((s) =>
-    T.toggle(s, { nowSec, nowMs }),
-  );
+  const { changed, state } = await applyTransition((s) => T.toggle(s, { nowSec, nowMs }));
   if (!changed) {
     if (before.run_state === 'idle') {
       console.log('Nothing running to toggle. Use `pomo start` to begin.');
     }
     return;
   }
-  if (state.run_state === 'paused') {
-    cancelAlarm(prev.alarm_pid);
-    console.log('Paused.');
-  } else {
-    await reschedule(state, prev.alarm_pid);
-    console.log('Resumed.');
-  }
+  // One call handles both directions: armAlarm arms when running, disarms when
+  // paused (the generation bump retires the worker either way).
+  await armAlarm();
+  console.log(state.run_state === 'paused' ? 'Paused.' : 'Resumed.');
 };
 
 const cmdStop = async ({ flags }) => {
   const full = flags.full === true;
-  const { changed, prev, record } = await applyTransition((s) => T.stop(s, { full }));
+  const { changed, record } = await applyTransition((s) => T.stop(s, { full }));
   if (!changed) return console.log('Nothing running.');
-  cancelAlarm(prev.alarm_pid);
+  await armAlarm(); // disarms
   if (record) appendRecord(record);
   if (record?.abandoned) {
     console.log(
@@ -254,31 +237,31 @@ const cmdStop = async ({ flags }) => {
 };
 
 const cmdSkip = async () => {
-  const { changed, state, prev, record } = await applyTransition((s) => T.skip(s));
+  const { changed, state, record } = await applyTransition((s) => T.skip(s));
   if (!changed) return console.log('Nothing running to skip.');
   if (record) appendRecord(record);
-  await reschedule(state, prev.alarm_pid);
+  await armAlarm();
   console.log(`Skipped. Next: ${state.phase ?? 'idle'}.`);
 };
 
 const cmdReset = async () => {
-  const { changed, state, prev } = await applyTransition((s) => T.reset(s));
+  const { changed, state } = await applyTransition((s) => T.reset(s));
   if (!changed) return console.log('Nothing running to reset.');
-  await reschedule(state, prev.alarm_pid);
+  await armAlarm();
   console.log(`Reset. ${formatMMSS(state.planned_min * 60)} on the clock.`);
 };
 
 const cmdNext = async ({ flags }) => {
   const now = nowEpoch();
   const full = flags.full === true;
-  const { changed, state, prev, record } = await applyTransition((s) =>
+  const { changed, state, record } = await applyTransition((s) =>
     T.next(s, { nowSec: now, full }),
   );
   if (!changed) {
     return console.log('Not at a waiting boundary. Use `pomo skip` to advance early.');
   }
   if (record) appendRecord(record);
-  await reschedule(state, prev.alarm_pid);
+  await armAlarm();
   console.log(`Advanced to ${(state.phase ?? 'idle').replace('_', ' ')}.`);
 };
 
@@ -325,7 +308,10 @@ const cmdBack = async () => {
       return s; // state moved on or another session already backed out
     }
     applied = true;
-    return result.state;
+    // Keep the LIVE alarm generation, never the (older) one in the snapshot:
+    // alarm_seq is alarm bookkeeping, not timer state, and must stay monotonic
+    // so the worker for the now-undone phase is reliably superseded (D-009).
+    return { ...result.state, alarm_seq: s.alarm_seq };
   });
 
   if (!applied) {
@@ -333,10 +319,10 @@ const cmdBack = async () => {
     return;
   }
 
-  // Cancel the new phase alarm and reschedule for the restored phase. The
-  // restored alarms_fired carries over from the pre-transition snapshot, so if
-  // the end cue already fired it will not re-fire (cuesDue finds it claimed).
-  await reschedule(restored, before.alarm_pid);
+  // Arm the restored phase. The bump retires the worker for the undone phase;
+  // the restored alarms_fired carries over from the pre-transition snapshot, so
+  // if the end cue already fired it will not re-fire (cuesDue finds it claimed).
+  await armAlarm();
 
   const remSec = remaining(restored, now) ?? 0;
   console.log(
@@ -346,10 +332,11 @@ const cmdBack = async () => {
 
 const cmdExtend = async ({ positional, flags }) => {
   const minutes = parseInt(positional[0] ?? flags.minutes ?? '5', 10);
-  const { changed, state, prev } = await applyTransition((s) => T.extend(s, { minutes }));
+  const { changed } = await applyTransition((s) => T.extend(s, { minutes }));
   if (!changed) return console.log('Nothing running to extend.');
-  // The end moved, so the old one-shot would fire early — reschedule it.
-  await reschedule(state, prev.alarm_pid);
+  // The end moved, so re-arm: the bump retires the worker bound to the old
+  // deadline and spawns one bound to the new one.
+  await armAlarm();
   console.log(`Extended by ${minutes}min.`);
 };
 
@@ -858,6 +845,11 @@ const cmdRestore = async (
     console.error('Run `pomo log backups` to list available backups.');
     process.exit(1);
   }
+
+  // Arm the restored phase so a detached worker drives it (and any worker from
+  // the pre-restore timer is superseded by the generation bump). restoreBackup
+  // already kept alarm_seq monotonic, so this never collides with a live worker.
+  await armAlarm();
 
   if (flags.json) {
     console.log(renderJson({ restored: id }));
