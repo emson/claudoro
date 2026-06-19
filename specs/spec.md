@@ -78,6 +78,7 @@ Unix/XDG defaults.
 | History | `…/claudoro/logs/YYYY-MM-DD.jsonl` | immutable finished-phase records | JSON Lines (append) |
 | Backups | `…/claudoro/backups/` | pre-mutation snapshots (rolling, keep last K) | copies |
 | Manifest | `…/claudoro/manifest.json` | what `pomo setup` installed (for clean uninstall) | JSON |
+| Dashboard | `…/claudoro/dashboard.html` | rebuildable stats page (`pomo stats --web`); holds labels, not for casual sharing (D-011) | static HTML |
 | Prefs | `$XDG_CONFIG_HOME/claudoro/prefs.json` (`~/.config/claudoro/`) | persisted view mode, transition mode, passthrough, motion, color, mute default | JSON |
 | Lock | `…/claudoro/lock` | `flock` target serialising all writes | empty file |
 
@@ -163,6 +164,7 @@ op (`undo`, `log clear`, direct edit). Rolling retention (keep last K). `restore
 - `extend` past sensible bounds → allow, but cap absurd values with a warning.
 - `back` after the window closed → refuse with guidance (use `start`).
 - Long break vs short break selection uses derived focus count, robust to `undo`.
+- Forgotten timer (slept / walked away) finalized by `stop`/`next` long past its end → credit focus only up to `planned + max_overtime`, flag the record `abandoned`, keep the true span in `started`/`ended` (D-012). `--full` records the true elapsed for a genuine marathon. The auto-reconcile path finalizes at `end_epoch`, so it is already exempt.
 
 **Errors:**
 | Condition | Response | Recovery |
@@ -301,6 +303,44 @@ op (`undo`, `log clear`, direct edit). Rolling retention (keep last K). `restore
 1. Command file frontmatter `allowed-tools: Bash(pomo *)`; body injects `` !`pomo $ARGUMENTS` ``.
 2. Plugin: `displayName: "Claudoro"`, manifest `name: claudoro`; its setup hook calls `pomo setup`. The bare `/pomo` and on-PATH `pomo` are installed by setup, not as namespaced plugin components.
 
+### M9. Stats & dashboard (D-011)
+
+**Does:** answer "how am I doing over time?" by folding the immutable records into derived
+analytics and rendering them three ways from one payload: a terminal panel (default), a
+self-contained HTML dashboard (`--web`), and stable JSON (`--json`).
+
+**Inputs:** verb `stats [--web] [--json]`; all day logs (read-only, cold path); the clock (read
+once at the boundary, passed in).
+
+**Outputs:** an ANSI/Unicode panel to stdout; or a written `dashboard.html` plus a browser launch;
+or a schema-versioned JSON object.
+
+**Behaviour:**
+1. `foldStats(records, now)` is pure: it derives totals (all-time focus minutes, pomodoros, active
+   days), today and last-7-day rollups, the current and best day-streak, a focus heatmap grid
+   (trailing ~12 weeks, Monday-aligned, level 0..4), top tags (parsed from labels via M1's
+   `parseTags`), a 24-bucket by-hour histogram, and the outcome mix (completed/skipped/aborted).
+2. **Local-time presentation over UTC storage (D-011):** the fold buckets by *local* calendar day
+   and hour (`stats.localDay`), while the log and its file names stay UTC (`derive.dateOf`). Storage
+   is unchanged; only the human-facing view is localised.
+3. The terminal renderer reuses the status line's visual language (icons, palette, shade ramp) and
+   degrades to plain text when captured (D-008). The HTML renderer emits a fully static,
+   dependency-free page (no client JS, no network, no CDN) with every user string HTML-escaped.
+4. `--web` writes the page to the state dir and opens it best-effort (`open`/`xdg-open`/`start`);
+   if no opener is available it prints the path. `--json` emits the payload verbatim.
+
+**Edge Cases:**
+- No records yet → a friendly empty state, never an error.
+- A label containing HTML (hand-edited via `log open`) → escaped in the page (XSS-safe).
+- No browser / SSH / headless → `--web` prints the path; the terminal panel always works.
+- Very long history → the heatmap is a fixed trailing window; the per-record explorer is capped.
+
+**Errors:**
+| Condition | Response | Recovery |
+|---|---|---|
+| Cannot write `dashboard.html` | clear error, non-zero exit | fix perms, re-run |
+| Browser launch fails | print the file path | open it manually |
+
 ## API / Interfaces
 
 ### `pomo` CLI command surface
@@ -308,7 +348,7 @@ op (`undo`, `log clear`, direct edit). Rolling retention (keep last K). `restore
 | Verb | Args / flags | Effect | `--json` |
 |---|---|---|---|
 | `start` | `[mins] [-w -s -l -f --notify N] [--mute] [-t/--label TEXT]` | begin a focus block (D-001/D-003/D-007) | n |
-| `pause` / `resume` / `stop` | | control the running block | n |
+| `pause` / `resume` / `stop` | `stop [--full]` | control the running block; `--full` records true elapsed past the abandon cap (D-012) | n |
 | `skip` | | finalize current as skipped, advance | n |
 | `reset` | | restart current phase, keep cycle (charter) | n |
 | `next` | | advance a waiting boundary (D-006a) | n |
@@ -319,6 +359,7 @@ op (`undo`, `log clear`, direct edit). Rolling retention (keep last K). `restore
 | `label` | `"TEXT"` | set current session label (D-007) | n |
 | `mute` / `unmute` | | toggle sound | n |
 | `status` | `[--json]` | rich current status into the conversation (D-004) | y |
+| `stats` | `[--web] [--json]` | derived analytics: streak, focus heatmap, tags, by-hour (D-011) | y |
 | `log` | `[--today\|--date D] [--json]`, `open`, `backups` | history (D-007) | y |
 | `undo` | `[N] [--dry-run] [--yes]` | remove last N records, backup first (D-007) | y |
 | `restore` | `[backup-id]` | restore from a backup | y |
@@ -420,6 +461,15 @@ Traced to charter Success Criteria (SC#1-6); SC#5 is revised per D-009.
   status line and is stamped on the completed record.
 - **AC-11 (D-008, output):** *Given* `pomo help` on a TTY, *then* output is colored/structured;
   *given* the same captured (non-TTY), *then* output is clean plain text.
+- **AC-13 (D-012, abandoned time):** *Given* a focus block forgotten for hours, *when* `pomo stop`,
+  *then* the record credits focus only up to `planned + max_overtime`, is flagged `abandoned`, and
+  keeps the true span; aggregates are not poisoned (read-time credit clamps any record); `pomo stop
+  --full` records the true elapsed instead.
+- **AC-12 (D-011, stats):** *Given* several days of completed focus blocks, *when* `pomo stats`,
+  *then* the panel shows the correct totals, day-streak, focus heatmap, and top tags in local time;
+  *when* `pomo stats --web`, *then* a self-contained HTML file is written (no external resources)
+  and opened, or its path printed if no browser is available; *when* `pomo stats --json`, *then* a
+  stable schema-versioned payload is emitted.
 
 ## Test Specifications
 
@@ -437,6 +487,8 @@ Traced to charter Success Criteria (SC#1-6); SC#5 is revised per D-009.
 | (D-006a) modes | TEST-M2-003 | ✓ Full |
 | (D-007) undo + backup | TEST-M5-001, TEST-M5-002 | ✓ Full |
 | (D-008) output discipline | TEST-M6-001 | ✓ Full |
+| (D-011) stats fold + HTML | TEST-M9-001, TEST-M9-002 | ✓ Full |
+| (D-012) abandoned-time credit | TEST-M2-004 | ✓ Full |
 
 Test specs are generated progressively (baseline per behaviour path + error condition; more from
 simulation). Baseline set:
@@ -508,6 +560,24 @@ ends. **Expected:** one cue total. **Derived from:** D-009.
 **Source:** M8/D-002. **Type:** manual review. **Steps:** type `/pomo start` in Claude Code.
 **Expected:** runs the CLI via injection (not `/claudoro:pomo`). **Derived from:** baseline.
 
+### TEST-M2-004: Abandoned time is credited, not counted
+**Source:** M2/D-012. **Type:** unit. **Steps:** 1. finalize (via `stop`) a focus block whose
+elapsed is far past `planned + max_overtime`. **Expected:** `actual_min` is capped at
+`planned + max_overtime`, the record is flagged `abandoned`, and `started`/`ended` keep the true
+span; `stop --full` records the true elapsed; `creditedMin` clamps an unflagged legacy record so
+aggregates are not poisoned. **Derived from:** baseline.
+
+### TEST-M9-001: Stats fold derives streak and totals from records
+**Source:** M9/D-011. **Type:** unit. **Steps:** 1. fold a record set spanning several local days.
+**Expected:** all-time focus minutes and pomodoros are correct; the current day-streak counts only
+consecutive local days with a completed focus and breaks on a gap; an empty set folds to zeroes
+without throwing. **Derived from:** baseline.
+
+### TEST-M9-002: Dashboard HTML is self-contained and escapes labels
+**Source:** M9/D-011. **Type:** unit. **Steps:** 1. render the HTML with a label containing
+`<script>`. **Expected:** the page references no external host (no `http(s)://`, no `src=`), embeds
+no client `<script>` for data, and the malicious label is HTML-escaped, not live. **Derived from:** baseline.
+
 ## Glossary
 
 | Term | Definition |
@@ -521,6 +591,10 @@ ends. **Expected:** one cue total. **Derived from:** D-009.
 | Passthrough | The normal Claude Code status info (model · context · git) that Claudoro composes with, not clobbering (D-004). |
 | Owner session | The Claude Code `session_id` that started the timer; used for attribution and `/pomo status`, self-healing (D-009). |
 | Derive, do not store | Aggregates are folded from immutable records, never stored as mutable counters, so `undo` cannot desync (D-007). |
+| Streak | Consecutive local calendar days, ending today or yesterday, each with at least one completed focus block (D-011). |
+| Focus heatmap | A trailing ~12-week grid of focus minutes per local day, shaded by intensity (D-011). |
+| Dashboard | The self-contained static HTML stats page written by `pomo stats --web`; a rebuildable, local-first artifact (D-011). |
+| Abandoned block | A phase finalized far past its end (forgotten timer): focus is credited only up to `planned + max_overtime`, the record is flagged `abandoned`, the true span is kept (D-012). |
 | Provenance groups A/B/C | Record fields by source: A timing/identity (CLI), B intent/reflection (user), C work context (agent-enriched, opt-in) (D-007). |
 | `end_epoch` | Wall-clock deadline; remaining time is `end_epoch - now` (D-005). |
 | Alarm claim | The atomic flag (`alarms_fired`) ensuring a cue fires exactly once across processes/sessions (D-009). |

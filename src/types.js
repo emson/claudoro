@@ -29,6 +29,7 @@
  * @property {number} notify       Pre-end warning, minutes before end (default 1)
  * @property {boolean} mute        Start with sound disabled
  * @property {number} [back_window]  Seconds after a transition during which `back` is allowed (default 120)
+ * @property {number} [max_overtime] Minutes of overtime credited before a phase is treated as abandoned (default 30, D-012)
  */
 
 /**
@@ -78,6 +79,7 @@
  * @property {number} ended
  * @property {number} actual_min
  * @property {number} overtime_min
+ * @property {boolean} [abandoned]   True when finalized far past its end (forgotten timer); focus credited only up to planned + max_overtime (D-012)
  * @property {RecordStatus} status
  * @property {{count:number,total_sec:number,intervals:Array<{start:number,end:number}>}} pauses
  * @property {Config} config_snapshot
@@ -98,6 +100,41 @@
  * @property {string} passthrough   Comma-separated: "model,context,git"
  * @property {'full'|'reduced'|'off'} motion
  * @property {boolean} mute
+ */
+
+/**
+ * One day in the focus heatmap grid (M9/D-011). Buckets by LOCAL calendar day.
+ * @typedef {object} DayCell
+ * @property {string} date        Local 'YYYY-MM-DD'
+ * @property {number} focusMin    Completed focus minutes that day
+ * @property {number} pomodoros   Completed focus blocks that day
+ * @property {number} level       Intensity 0..4 (0 = none), relative to the window max
+ * @property {boolean} pad        True for cells outside the data window (future days, padding)
+ */
+
+/**
+ * Per-tag focus totals, parsed from labels (M9/D-011).
+ * @typedef {object} TagStat
+ * @property {string} tag         Canonical '#kebab' token
+ * @property {number} focusMin
+ * @property {number} pomodoros
+ */
+
+/**
+ * Derived analytics, folded once from the immutable records and rendered to the
+ * terminal, HTML, and JSON surfaces (M9/D-011). Buckets are LOCAL time; storage
+ * stays UTC. Pure output of `stats.foldStats`.
+ * @typedef {object} StatsPayload
+ * @property {number} schema
+ * @property {{focusMin:number, pomodoros:number, daysActive:number}} totals
+ * @property {{pomodoros:number, focusMin:number}} today
+ * @property {{pomodoros:number, focusMin:number}} week
+ * @property {{current:number, best:number}} streak
+ * @property {{weeks: DayCell[][], maxFocusMin:number}} heatmap  Monday-aligned trailing weeks
+ * @property {TagStat[]} tags                                    Top tags, descending by focus
+ * @property {number[]} byHour                                   24 entries: focus minutes by local hour
+ * @property {{completed:number, skipped:number, aborted:number, partial:number}} outcomes
+ * @property {Array<{started:number, label:(string|null), phase:string, status:string, actualMin:number, abandoned:boolean}>} recent  Most recent focus blocks (capped)
  */
 
 /**

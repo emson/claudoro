@@ -38,6 +38,7 @@ export const IDLE_STATE = Object.freeze({
     notify: 1,
     mute: false,
     back_window: 120,
+    max_overtime: 30,
   },
 });
 

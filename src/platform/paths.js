@@ -4,6 +4,7 @@
  */
 import { join } from 'node:path';
 import { homedir, platform, tmpdir } from 'node:os';
+import { today } from '../derive.js';
 
 const isWindows = platform() === 'win32';
 
@@ -57,6 +58,7 @@ export const claudoroPaths = (env = process.env) => {
     logsDir: join(stateDir, 'logs'),
     backupsDir: join(stateDir, 'backups'),
     manifestFile: join(stateDir, 'manifest.json'),
+    dashboardFile: join(stateDir, 'dashboard.html'),
     prefsFile: join(configDir, 'prefs.json'),
     claudeDir,
     commandsDir: join(claudeDir, 'commands'),
@@ -70,5 +72,4 @@ export const logFileForDate = (date, env = process.env) => {
   return join(logsDir, `${date}.jsonl`);
 };
 
-export const todayLogFile = (env = process.env) =>
-  logFileForDate(new Date().toISOString().slice(0, 10), env);
+export const todayLogFile = (env = process.env) => logFileForDate(today(), env);

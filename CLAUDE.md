@@ -79,6 +79,7 @@ Claude Code ──~1s, JSON on stdin──▶ pomo statusline ──read──�
 | **M6 Help & output** | one TTY-aware renderer: pretty on a TTY, clean plain text when captured, `--json` when asked (D-008) |
 | **M7 Setup/uninstall** | wire/unwire Claude Code (command file, `statusLine` merge, hooks, manifest); idempotent; clean reversal (D-005) |
 | **M8 Command file & plugin** | bare `/pomo` command file + thin marketplace plugin (D-001/D-002) |
+| **M9 Stats & dashboard** | pure `foldStats` over the log → terminal panel / self-contained HTML / JSON; local-time presentation over UTC storage (D-011) |
 
 ## Non-negotiable invariants
 
@@ -119,8 +120,9 @@ These map directly to acceptance criteria (`specs/spec.md`). Do not regress them
 
 ## Layout
 
-`bin/pomo.js` (entry, with a lazy fast-path for `statusline`), `src/` modules per M1..M8
-(`platform/` for OS edges, `render/` for the segment), `src/types.js` (domain typedefs),
+`bin/pomo.js` (entry, with a lazy fast-path for `statusline`), `src/` modules per M1..M9
+(`platform/` for OS edges, `render/` for the segment and the HTML dashboard, `stats.js` for the
+analytics fold), `src/types.js` (domain typedefs),
 `test/` mirroring the modules. Pure timer transitions return `{state, record?}` or `null`;
 `store.applyTransition` runs them under the lock and reports `{changed, state, prev, record}`, so
 callers drive side effects off `changed` rather than re-inspecting state.

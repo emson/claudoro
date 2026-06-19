@@ -19,7 +19,7 @@ import {
 import { join } from 'node:path';
 import { claudoroPaths, logFileForDate, todayLogFile } from './platform/paths.js';
 import { withLock } from './platform/lock.js';
-import { parseJsonl, deriveCadence } from './derive.js';
+import { parseJsonl, deriveCadence, today, dateOf } from './derive.js';
 import { readState, writeState } from './store-read.js';
 
 /** Write `content` to `file` atomically (temp + rename), like the state store. */
@@ -70,8 +70,7 @@ export const readRecordsForDate = (date, env = process.env) => {
 };
 
 /** Read today's records. */
-export const readTodayRecords = (env = process.env) =>
-  readRecordsForDate(new Date().toISOString().slice(0, 10), env);
+export const readTodayRecords = (env = process.env) => readRecordsForDate(today(), env);
 
 /**
  * Read every record across all day files in chronological order.
@@ -147,8 +146,7 @@ export const writeBackup = (env = process.env) => {
   // Back up today's log
   const todayLog = todayLogFile(env);
   if (existsSync(todayLog)) {
-    const date = new Date().toISOString().slice(0, 10);
-    copyFileSync(todayLog, join(backupDir, `${date}.jsonl`));
+    copyFileSync(todayLog, join(backupDir, `${today()}.jsonl`));
   }
 
   pruneBackups(paths.backupsDir);
@@ -206,10 +204,8 @@ export const findLastNCompleted = (n = 1, env = process.env) => {
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {object[]}
  */
-export const findAllForToday = (env = process.env) => {
-  const today = new Date().toISOString().slice(0, 10);
-  return readRecordsForDate(today, env).slice().reverse();
-};
+export const findAllForToday = (env = process.env) =>
+  readRecordsForDate(today(), env).slice().reverse();
 
 /**
  * Remove the given records (cross-day).
@@ -224,11 +220,7 @@ export const undoRecords = (records, env = process.env) => {
     const backupId = writeBackup(env);
     const idsToRemove = new Set(records.map((r) => r.id));
 
-    const dates = [
-      ...new Set(
-        records.map((r) => new Date(r.started * 1000).toISOString().slice(0, 10)),
-      ),
-    ];
+    const dates = [...new Set(records.map((r) => dateOf(r.started)))];
 
     for (const date of dates) {
       const logFile = logFileForDate(date, env);

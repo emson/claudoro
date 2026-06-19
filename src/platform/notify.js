@@ -98,7 +98,8 @@ const playSound = async (cue) => {
 };
 
 const playMac = async (cue) => {
-  // TODO: bundle short audio clips; fall back to system sounds
+  // Uses the built-in macOS system sounds (zero install, always present).
+  // Bundling custom clips is a possible future enhancement, not a requirement.
   const sounds = {
     [CUE.warning]: '/System/Library/Sounds/Tink.aiff',
     [CUE.focusEnd]: '/System/Library/Sounds/Glass.aiff',
@@ -139,13 +140,17 @@ const notify = async (cue, label) => {
   const msg = messages[cue] || messages[CUE.focusEnd];
 
   if (IS_MAC) {
+    // Escape backslash and double-quote so a label with quotes can't break the
+    // AppleScript string literal (the message is user-controlled).
+    const safe = msg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     await trySpawn('osascript', [
       '-e',
-      `display notification "${msg}" with title "Claudoro"`,
+      `display notification "${safe}" with title "Claudoro"`,
     ]);
   } else if (IS_WIN) {
-    // Escape backticks and double-quotes before interpolation into PowerShell.
-    const safe = msg.replace(/`/g, '').replace(/"/g, "'");
+    // The message is embedded in a single-quoted PowerShell string; escape any
+    // single quote by doubling it (PS rule) so a label with apostrophes is safe.
+    const safe = msg.replace(/'/g, "''");
     const toast = [
       "$ErrorActionPreference='SilentlyContinue';",
       '[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] > $null;',

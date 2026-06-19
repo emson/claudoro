@@ -4,6 +4,7 @@
  * Side effects (printing, process.exit) happen here; timer.js stays pure.
  */
 import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import {
   ensureDirs,
@@ -13,6 +14,10 @@ import {
   readPrefs,
   writePrefs,
 } from './store.js';
+import { claudoroPaths } from './platform/paths.js';
+import { openPath } from './platform/open.js';
+import { foldStats } from './stats.js';
+import { renderStatsHtml } from './render/dashboard.js';
 import * as T from './timer.js';
 import {
   appendRecord,
@@ -31,6 +36,7 @@ import { scheduleAlarm, cancelAlarm, reconcileAndReschedule } from './alarm.js';
 import {
   renderHelp,
   renderStatus,
+  renderStats,
   renderJson,
   renderLog,
   renderLogSummary,
@@ -85,6 +91,7 @@ const FLAGS_WITH_VALUES = new Set([
   'phase',
   'status',
   'grep',
+  'max-overtime',
 ]);
 
 const SHORT = {
@@ -166,6 +173,8 @@ const cmdStart = async ({ positional, flags }) => {
     notify: parseInt(flags.notify ?? '1', 10),
     // flag > persisted pref > default (matches the mode precedence below)
     mute: 'mute' in flags ? true : (prefs.mute ?? false),
+    // Overtime credited before a forgotten block is treated as abandoned (D-012).
+    max_overtime: parseInt(flags['max-overtime'] ?? '30', 10),
   };
   const mode = flags.mode ?? prefs.mode; // flag > persisted > default (D-006a)
 
@@ -228,12 +237,20 @@ const cmdToggle = async () => {
   }
 };
 
-const cmdStop = async () => {
-  const { changed, prev, record } = await applyTransition((s) => T.stop(s));
+const cmdStop = async ({ flags }) => {
+  const full = flags.full === true;
+  const { changed, prev, record } = await applyTransition((s) => T.stop(s, { full }));
   if (!changed) return console.log('Nothing running.');
   cancelAlarm(prev.alarm_pid);
   if (record) appendRecord(record);
-  console.log('Stopped.');
+  if (record?.abandoned) {
+    console.log(
+      `Stopped. This block ran long unattended, so ${record.actual_min}min of focus was ` +
+        `credited (not the full elapsed time). Use \`pomo stop --full\` to keep it all.`,
+    );
+  } else {
+    console.log('Stopped.');
+  }
 };
 
 const cmdSkip = async () => {
@@ -251,10 +268,11 @@ const cmdReset = async () => {
   console.log(`Reset. ${formatMMSS(state.planned_min * 60)} on the clock.`);
 };
 
-const cmdNext = async () => {
+const cmdNext = async ({ flags }) => {
   const now = nowEpoch();
+  const full = flags.full === true;
   const { changed, state, prev, record } = await applyTransition((s) =>
-    T.next(s, { nowSec: now }),
+    T.next(s, { nowSec: now, full }),
   );
   if (!changed) {
     return console.log('Not at a waiting boundary. Use `pomo skip` to advance early.');
@@ -485,6 +503,36 @@ const cmdStatus = async ({ flags }) => {
   } else {
     console.log(renderStatus(state, aggregates, prefs));
   }
+};
+
+/**
+ * Derived analytics over the whole record set (M9/D-011). One fold, three
+ * surfaces: terminal panel (default), `--web` HTML dashboard, `--json` payload.
+ * `deps.open` is injectable so tests can assert the path-printing branch.
+ */
+export const cmdStats = async ({ flags }, deps = { open: openPath }) => {
+  const now = nowEpoch();
+  const payload = foldStats(readAllRecords(), now);
+  const generatedAt = new Date(now * 1000).toISOString();
+
+  if (flags.json) {
+    console.log(renderJson({ ...payload, generatedAt }));
+    return;
+  }
+
+  if (flags.web) {
+    const { dashboardFile } = claudoroPaths();
+    writeFileSync(dashboardFile, renderStatsHtml(payload, { generatedAt }), 'utf8');
+    const opened = deps.open(dashboardFile);
+    console.log(
+      opened
+        ? `Dashboard opened in your browser:\n  ${dashboardFile}`
+        : `Dashboard written. Open it in a browser:\n  ${dashboardFile}`,
+    );
+    return;
+  }
+
+  console.log(renderStats(payload));
 };
 
 // ISO date validation pattern
@@ -854,6 +902,7 @@ const VERBS = {
   mute: cmdMute,
   unmute: (ctx) => cmdMute({ ...ctx, positional: ['unmute'] }),
   status: cmdStatus,
+  stats: cmdStats,
   log: cmdLog,
   undo: cmdUndo,
   restore: cmdRestore,

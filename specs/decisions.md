@@ -725,3 +725,240 @@ source of truth), D-005 (no daemon, detached one-shot alarm, atomic writes, wall
 
 **Revisit if:** genuine demand for deliberate concurrent timers (add named timers `--timer <name>`
 with per-timer stats kept separate so aggregates stay honest); or cross-device sync is wanted.
+
+---
+
+## D-010: Auto-pause on idle, an opt-in safety net for the forgotten timer
+**Date:** 2026-06-18
+**Status:** accepted
+**Context:** The `auto` default (D-006a) keeps the clock running, and auto-cycles a new focus block,
+whether or not the user is at the desk. D-006a accepted this "ran while away" cost (scenario S3) and
+deferred recovery to retroactive `pomo undo`. The open question this round: can Claudoro *prevent*
+the bogus accounting in the first place by detecting that "nothing is happening" and pausing on its
+own, when the programmer has forgotten to stop, and can it do so without lying about focus time,
+without daemons, and without touching the per-second hot path? The behaviour was optimised through a
+scenario simulation (deep focus, stepped-away, lunch with laptop open/closed, sleep, multi-session,
+clock jumps, return-after-pause, backgrounded-but-working, end-of-block-during-gap, flapping, write
+races) before this decision.
+
+**Two framing insights (from the simulation):**
+1. **A status-line tick is *session* liveness, not *human* liveness.** `refreshInterval` re-runs
+   `statusline` even while idle, so a terminal left in the foreground ticks forever while the user
+   is at lunch. A presence signal built on ticks therefore *never fires in the exact case the
+   feature exists for* (foreground-away). Interaction signals (prompts, tool calls via hooks) do not
+   rescue this: deep thinking and being away are observationally identical to Claude Code (both have
+   zero interaction). **The only signal that separates "present and thinking" from "away" is OS
+   input-idle time**, so it must be the primary signal.
+2. **Auto-pause is not a new state, it is a *tagged pause*.** The data model already has
+   `paused_at`, `paused_total_sec`, and `pauses.intervals[]`, and `resume` already shifts `end_epoch`
+   forward by the paused span. If an idle-pause is just a pause flagged `source:"idle"`, then
+   reconciliation (excluding the away time from focus, re-deriving aggregates, `undo`/`restore`) is
+   **correct by construction** and needs no new machinery (D-007 derive-don't-store).
+
+**Choice:**
+- **Opt-in toggle, default off.** `pomo idle [on|off|<minutes>]` sets/reads it; persisted in
+  `prefs.json` (`{"idle": {"enabled": false, "after_min": 10, "resume": "manual"}}`); `pomo start`
+  takes `--idle [N]` / `--no-idle` (precedence flag > persisted > default), consistent with D-003 and
+  the D-006a mode spectrum. **Default off** because the audience expects a Pomodoro to keep ticking
+  (pymodoro parity, D-003), and a timer that pauses itself is more surprising than one that
+  auto-advances; opt-in avoids that surprise while making the safety net one command away. Default
+  threshold **10 minutes** of input-idle (generous, so ordinary thinking does not trip it); a sane
+  floor (≈2 min) prevents flapping configs.
+- **Signal: OS input-idle, best-effort, degrading exactly like sound (D-005).** Query OS idle
+  (`ioreg`/`HIDIdleTime` on macOS, an `xprintidle`-class query on Linux/X11, `GetLastInputInfo` via
+  PowerShell on Windows) only at discrete check points, never per tick. When unavailable (SSH,
+  headless, Wayland, tool absent) **degrade to the session-liveness heartbeat** (last tick/hook
+  mtime), which honestly catches only terminal-close / sleep / quit, not foreground-away. The active
+  signal is surfaced (`/pomo status` shows `os-idle` or `degraded`) so reduced coverage is never a
+  silent cap.
+- **Where the check runs: the existing detached one-shot, generalised into a per-block watcher;
+  the hot path stays pure.** The alarm one-shot already sleeps through the block; it also wakes
+  coarsely (≈ every few minutes), queries idle, and, if idle ≥ threshold, applies the auto-pause
+  transition under `flock`. It is reaped on pause/stop and dies at block end exactly as today, so it
+  is **not a persistent daemon** (honours D-005). Verb-heads and the end-of-block boundary are
+  backstops. The renderer never queries idle and never locks (INV: cheap, crash-free hot path).
+- **Mechanism: a precise, retroactive, tagged pause.** On trigger, stamp the pause at
+  `lastActive = now − measured_idle` (so only attended time is ever credited as focus), tagged
+  `source:"idle"`. A paused block has a frozen deadline, so its boundary cannot fire an alarm into an
+  empty room or auto-advance a bogus block (this is why no special end-of-block suppression is
+  needed: pausing *before* the boundary already handles it; the boundary check is only a backstop for
+  idle that begins too close to the end).
+- **Reconcile-after-pause (resolved per scenario):**
+  - *Returns to continue:* `pomo resume`, the standard resume shifts `end_epoch`; the `idle`
+    interval is recorded; focus excludes the gap.
+  - *Returns done / abandoning:* `pomo stop` finalizes a `partial` with `actual_min` = attended time.
+  - *Returns much later (zombie pause):* a block paused longer than `idle.expire_after` is
+    auto-finalized `partial` on the next interaction, so stale paused state never lingers.
+  - *Frictionless option:* `idle.resume = auto` resumes on the first interaction after an idle-pause;
+    default `manual` keeps resumption explicit so the accounting stays visible and honest.
+- **UX/visibility:** while idle-paused the segment uses the D-006 #4 recede treatment plus an "away"
+  annotation and the verb to proceed, e.g. `⏸ 17:30 · away 42m · /pomo resume`; `/pomo status`
+  states the setting in words (`Auto-pause: on, after 10m inactive (os-idle)`).
+
+**Why not alternatives:**
+- **Status-line-tick / interaction presence (the first design):** dominated by session liveness, so
+  it fails foreground-away (lunch with the laptop open), the headline case. Rejected as the primary
+  signal; the heartbeat survives only as the degraded fallback.
+- **OS-level idle as a hard dependency / always-on watcher daemon:** a persistent daemon violates
+  D-005, and a hard idle dependency breaks on headless/SSH. Rejected in favour of best-effort idle
+  on the existing bounded one-shot, with graceful degradation.
+- **A new "idle/auto-paused" state and bespoke retroactive-truncation logic:** redundant with the
+  pause machinery and a fresh way to desync aggregates. Rejected: model it as a tagged pause.
+- **Default on:** directly neutralises the D-006a S3 cost, but auto-pausing a running block is
+  intrusive and surprising for the deep-flow user and contradicts audience expectation. Rejected as
+  the default; available with one command.
+
+**Accepted tradeoffs:**
+- **The motionless deep-thinker can be falsely paused** (staring while thinking, no input, past the
+  threshold). This is irreducible: OS input-idle cannot distinguish "thinking still" from "left the
+  room." Mitigated by the generous default threshold, full reversibility (a tagged pause loses
+  nothing, `resume` continues), and `pomo idle off` for pure-flow users. This is the same values
+  split as D-006a (flow-state vs casual), resolved the same way: smart default plus an easy toggle.
+- **Degraded mode loses foreground-away coverage** where OS idle is unavailable; surfaced, not
+  silent.
+- **"At the machine but off-task"** (browsing) keeps the timer running, OS idle reports presence and
+  task-relevance is unknowable. Out of scope.
+- **The watcher adds bounded interval wakeups**; coarse intervals keep the battery/CPU cost modest,
+  and it self-terminates at block end.
+
+**Edge cases / mitigations:**
+- *Clock jump backward (NTP/DST):* idle = `now − lastInput` clamps to ≥ 0, so no spurious pause;
+  displayed remaining still clamped per D-006.
+- *Clock jump forward vs genuine away:* OS idle is measured against input, not wall clock, so a
+  forward jump while actively typing reads as *active* (no pause), while true absence reads as idle
+  (pause). More robust than a wall-clock heartbeat.
+- *Laptop sleep:* the watcher is suspended too; on wake it detects its overdue wake (scheduled-vs-
+  actual gap) and pauses at the pre-sleep `lastActive`; the heartbeat fallback and the boundary check
+  are additional backstops. (Note: OS idle resets on wake, so sleep must be caught by the overdue
+  wake, not by the post-wake idle reading.)
+- *Multi-session (D-009):* OS idle is machine-global and one global watcher serves the one global
+  timer, so activity in any pane keeps the timer running; no per-pane bookkeeping.
+- *End-of-block during the gap:* prevented, the block is already paused before its boundary, so no
+  alarm and no auto-advance; boundary check backstops the too-late-to-pause case.
+- *Flapping (repeated short glances):* the generous threshold and the floor mean only genuine ≥
+  threshold absences pause; each is a real interval, no churn.
+- *Write race (watcher pause + a verb + alarm claim together):* serialised by `flock`; transitions
+  are idempotent (auto-pause when already paused, or resume when running, no-op), first wins, per the
+  D-006a/D-009 idempotency rule.
+
+**Evidence:** scenario simulation (S1 deep-focus … S12 write-race, optimised over five iterations
+against a frozen scenario set); A1 from the spec glossary (`refreshInterval` re-runs even while
+idle); D-006a (the `auto` S3 cost this mitigates, and the values-split + smart-default + toggle
+pattern reused); D-005 (no daemon, detached one-shot, best-effort-and-degrade, wall-clock); D-007
+(derive-don't-store makes a tagged pause reconcile correctly; `undo`/`restore` as the backstop);
+D-006 (#4 pause-recedes treatment, clock-jump clamping); D-003/D-004 (flag + persisted-pref +
+spectrum config shape).
+
+**Revisit if:** feedback shows users want it on by default (flip the default, keep the generous
+threshold); the motionless-thinker false-pause proves common (add a soft two-stage "still there?"
+hint before the hard pause, or lengthen the default); robust cross-platform idle detection (esp.
+Wayland) becomes cheap enough to make the degraded path rare; or demand appears for an OS-idle-driven
+*auto-resume* on return rather than the explicit default.
+
+---
+
+## D-011: Stats and dashboard, one fold rendered to three surfaces
+**Date:** 2026-06-19
+**Status:** accepted
+**Context:** The live status line answers "what now?" and `pomo log` is the ledger of individual
+blocks, but neither answers "how am I doing over time?" (streaks, where focus goes, when I focus
+best). Users asked for a richer view and for a "user-friendly" rendering of the logs in local time.
+The day logs are stored in UTC (D-007) and that stays: UTC is stable, portable across machines, and
+never needs reparsing across timezone changes. The open question was the *surface*: a browser
+dashboard (as built for the sister project skill_loop) is rich and shareable, but a browser hop is
+the exact context switch Claudoro exists to remove. The audience lives in the terminal.
+
+**Two framing insights:**
+1. **Local time is a presentation concern, not a storage concern.** Storage and the ledger stay UTC
+   (`derive.dateOf`); the human-facing analytics bucket by *local* calendar day and hour
+   (`stats.localDay`). This cleanly separates the two layers and is the literal answer to the
+   "user-friendly local view" ask, with zero change to the immutable log.
+2. **The dashboard is a fold, not a surface.** Streaks, the focus heatmap, tag totals, the
+   time-of-day histogram and outcome mix are all derived from the same immutable records (D-007).
+   Compute them once in a pure `foldStats(records, now)`, then render that one payload three ways.
+   The surfaces can never disagree because they share the fold.
+
+**Choice:**
+- **One verb, minimal surface: `pomo stats`** with three renderings of a single payload:
+  - **terminal (default)** — an ANSI/Unicode panel (KPIs, streak, focus heatmap, top tags, by-hour,
+    outcomes) in the same visual language as the status line (D-006). Terminal-first honours the
+    no-context-switch promise; it works over SSH and headless where no browser exists.
+  - **`--web`** — a self-contained static HTML file written to the state dir and opened in the
+    browser; the opt-in deep-dive / shareable artifact. The browser hop is chosen, never default.
+  - **`--json`** — the agent feed, so Claude can narrate trends in chat (the group-C enrichment
+    gestured at in notes/005). Stable, schema-versioned, like every other `--json` verb (D-008).
+- **`pomo log` stays the ledger** (individual records, browsable by range/filter). `pomo stats` is
+  the summary. Two clear nouns, no third verb; `--web` is a rendering of the stats, not a new surface.
+- **The HTML is static and dependency-free.** Fully rendered in Node (no client JS, no CDN, no
+  network), values baked in, every user string HTML-escaped. It honours the zero-dependency and
+  local-first invariants, is XSS-safe against hand-edited labels by construction, and renders
+  offline forever. Interactivity (filtering) is deferred; it is not needed for v1 and would add a
+  client-JS attack surface for little gain.
+- **`foldStats` lives in its own module (`src/stats.js`), never in `derive.js`.** `derive.js` is on
+  the per-tick hot path; the heavier analytics fold (streak, heatmap grid, tag and hour
+  aggregation) must not inflate that module's load cost (the cheap-hot-path invariant). `stats` is a
+  cold-path verb that reads all records, like `undo`/cadence re-derivation already do.
+
+**Consequences:** a new module M9 (pure fold + two pure string renderers + a thin verb and a
+cross-platform browser-open edge). The dashboard is a rebuildable artifact: delete `dashboard.html`
+and the next `pomo stats --web` recreates it. It contains your labels, so it lives in the state dir
+and is not for casual sharing. Local-time analytics are anchored to the machine that owns the data,
+which is the right default for a local-first personal tool; opening the file on a far-timezone
+device shows the owning machine's local day, which is acceptable and consistent with the terminal.
+
+**Revisit if:** users want a range selector on stats (reuse `pomo log`'s `resolveRange`); demand
+appears for interactive filtering (add a guarded client-JS layer, keeping the static page as the
+no-JS fallback); or cross-device viewing becomes common enough to justify per-viewer timezone
+rebucketing (embed raw epochs and fold in the browser, accepting the logic duplication).
+
+---
+
+## D-012: Abandoned time is credited, not counted; bounded at write and read
+**Date:** 2026-06-19
+**Status:** accepted
+**Context:** A focus block was started, then forgotten (laptop asleep / walked away), and `pomo stop`
+was run ~11.5h later. The record landed as one focus block with `actual_min ≈ 692` (`11h 32m`),
+poisoning every focus aggregate (totals, heatmap intensity, by-hour peak). The auto-advance path is
+already correct: `reconcileStep` finalizes a completed phase at `state.end_epoch`, so the detection
+delay is never counted. The pollution comes only from the paths that finalize at the real `now`:
+`stop`, `next` at a waiting boundary, and `skip` on an overdue phase. The constraint is that modest
+overtime (e.g. 35 min on a 25 min block, ignoring the chime in flow) is REAL and must be kept; only
+egregious overflow (hours) is abandonment. Without an OS-idle signal (that is D-010), magnitude is
+the only discriminator available at finalize time.
+
+**Two framing insights:**
+1. **Abandoned time is a credit problem, not a deletion problem.** The user's instinct ("log the
+   session, ignore the rest") is right, but "ignore" should not mean deleting records (destructive;
+   `undo` already does that safely under D-007). It means *crediting bounded focus* and discarding
+   the overflow. Nothing is lost: `started`/`ended` still record the true span, and a flag marks it.
+2. **One cap notion, enforced twice.** The same bound ("credit real elapsed up to planned +
+   `max_overtime`") is applied at write time (so new records are honest) and at read time in the
+   folds (so legacy and hand-edited records can never poison aggregates either). Read-time defense
+   means the existing `11h 32m` record is neutralised the moment this ships, with no migration.
+
+**Choice:**
+- **Bounded credit at finalize.** `finalizeRecord` caps `actual_min`/`overtime_min` at
+  `planned + max_overtime` and sets `abandoned: true` when the cap bites. `started`/`ended` keep the
+  true span. The auto-reconcile path (finalizes at `end_epoch`) is unaffected by construction.
+- **Defensive credit at read.** A single `derive.creditedMin(record)` (and `wasAbandoned(record)`)
+  is used by `summarize`, `foldRecords`, and `foldStats`, so every aggregate credits at most
+  `planned + max_overtime` per record regardless of what the log holds.
+- **Honest ledger.** `pomo log` shows an abandoned record as its credited focus plus the true span,
+  e.g. `25m focus (ran 11h 32m, abandoned)`. The truth is surfaced, never buried.
+- **The override.** `pomo stop --full` / `pomo next --full` record the true elapsed (the rare
+  genuine marathon); the threshold is `max_overtime`, captured at start (flag > default, like
+  `back_window`), default **30 min**, so real overtime is never clipped.
+- **Scope boundary.** This fixes the *duration* pollution (the reported bug). The *count* inflation
+  from an awake `auto` cascade is prevented by D-010 (idle auto-pause) and recovered by `undo`; it
+  is deliberately not re-solved here, because auto-dropping completed records would violate D-007.
+
+**Consequences:** the PhaseRecord gains an optional `abandoned` boolean and `Config` gains
+`max_overtime` (additive, schema stays 1; readers default when absent). Stats are robust by
+construction, forever, without migration. The change is small and centralised: one cap in
+`finalizeRecord`, one helper in `derive`, and the consumers that already read `actual_min` keep
+working because the credited value flows through the same field.
+
+**Revisit if:** users report real overtime being clipped (raise the default or make the threshold a
+persisted pref); an OS-idle signal lands (D-010) and can distinguish present-overtime from absence
+precisely (then credit by presence, not magnitude); or demand appears to also auto-close a phase
+left holding in overtime past the threshold (today it shows `+overtime` until the user acts).

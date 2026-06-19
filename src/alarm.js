@@ -33,8 +33,8 @@ export const scheduleAlarm = (state) => {
   const warnAt = end_epoch - (config.notify ?? 1) * 60;
   const mute = config.mute ?? false;
 
-  // TODO: spawn a real detached worker once _alarm-worker.js is implemented
-  // For now: spawn a Node one-liner that sleeps and fires
+  // Run the detached worker (_alarm-worker.js): it sleeps to each cue time and
+  // fires through the shared atomic claim, surviving even if every session closes.
   const args = [
     ALARM_WORKER,
     String(end_epoch),

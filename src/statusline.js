@@ -9,7 +9,7 @@
  *   - Never throw: degrade to passthrough on any error.
  *
  * Input:  Claude Code session JSON on stdin.
- * Output: one line (or two in `full` mode) to stdout.
+ * Output: one line to stdout (the segment plus the passthrough).
  */
 import { readState, readPrefs } from './store-read.js';
 import { renderSegment } from './render/segment.js';

@@ -8,6 +8,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- Abandoned-time handling (D-012): a forgotten timer (slept / walked away) finalized by `stop` or
+  `next` long past its end now credits focus only up to `planned + max_overtime` (default 30 min)
+  and flags the record `abandoned`, keeping the true span in `started`/`ended`. Aggregates apply the
+  same cap at read time (`derive.creditedMin`), so stats are robust to existing and hand-edited
+  records with no migration. `pomo stop --full` records the true elapsed for a genuine marathon;
+  `pomo start --max-overtime N` tunes the threshold. `pomo log` shows abandoned blocks honestly.
+- `pomo stats` (M9, D-011): derived analytics folded from the immutable log on read — current and
+  best day-streak, a 12-week focus heatmap, top tags, focus-by-hour, and the outcome mix. Renders
+  three ways from one pure `foldStats` payload: a terminal panel (default), a self-contained,
+  dependency-free HTML dashboard (`--web`, opened in the browser), and stable JSON (`--json`).
+  Times are presented in local time while the log stays UTC.
 - Initial scaffold: project structure, platform layer (paths, lock, notify), M1 store + derive
   foundation, M2 timer engine, M3 renderer, M4 alarm, M5 history, M6 output, M7 setup, M8 plugin.
 - `store.applyTransition` runs a pure timer transition under the lock and reports
@@ -49,6 +60,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Single shared atomic `claimCue` dedupes the detached worker against the render-claim (no
   double alarm across sessions).
 - Backups are pruned to the last K; read-only/absent HOME degrades to `TMPDIR`.
+- OS notifications now escape the label safely, so a session label containing a quote or
+  apostrophe no longer breaks the macOS (`osascript`) or Windows (PowerShell) notification.
 
 ### Changed
 - Minimum Node bumped to 22 (Node 20 reached end of life).

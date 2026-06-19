@@ -3,9 +3,8 @@
  *
  * `pomo setup` (idempotent, marker-guarded):
  *   1. Write the /pomo command file to ~/.claude/commands/pomo.md
- *   2. Back up settings.json, then merge the statusLine entry
- *   3. Register hooks (if any)
- *   4. Record every change in manifest.json for clean reversal
+ *   2. Back up settings.json, then merge the statusLine entry (with refreshInterval)
+ *   3. Record every change in manifest.json for clean reversal
  *
  * `pomo uninstall`: reads manifest, reverses exactly.
  * `npm uninstall -g claudoro` removes the binary; this handles the CC wiring.
@@ -87,9 +86,7 @@ export const setup = (env = process.env, { quiet = false } = {}) => {
   });
   console.log(`  [+] statusLine set in: ${paths.claudeSettings}`);
 
-  // 3. TODO: register hooks (refreshInterval, etc.)
-
-  // 4. Write manifest
+  // 3. Write manifest
   manifest[SETUP_MARKER] = true;
   manifest.actions = log;
   writeManifest(paths.manifestFile, manifest);

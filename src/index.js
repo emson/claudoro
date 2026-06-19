@@ -13,3 +13,5 @@ export {
 } from './derive.js';
 export { renderSegment } from './render/segment.js';
 export { renderPassthrough } from './render/passthrough.js';
+export { foldStats } from './stats.js';
+export { renderStatsHtml } from './render/dashboard.js';

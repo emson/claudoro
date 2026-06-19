@@ -14,6 +14,8 @@ import {
   progressFraction,
   nowEpoch,
   summarize,
+  creditedMin,
+  wasAbandoned,
 } from './derive.js';
 
 // ---------------------------------------------------------------------------
@@ -278,11 +280,21 @@ export const COMMAND_HELP = Object.freeze({
     summary: 'Stop the timer and return to idle. The current phase is not counted.',
     whenToUse:
       'The user is finished and wants the timer cleared. WARNING: the current phase is discarded, not counted. To count it first, run skip before stop.',
-    usage: 'pomo stop',
-    examples: [{ cmd: 'pomo stop', desc: 'end the session, clear the live timer' }],
+    usage: 'pomo stop [--full]',
+    flags: [
+      {
+        flag: '--full',
+        desc: 'record the true elapsed time even if the block ran long unattended',
+      },
+    ],
+    examples: [
+      { cmd: 'pomo stop', desc: 'end the session, clear the live timer' },
+      { cmd: 'pomo stop --full', desc: 'a genuine marathon: keep all the elapsed time' },
+    ],
     notes: [
       'Stop does not finalize the current phase as completed; use skip to count it.',
       'Any pending alarm is cancelled and the detached one-shot is reaped.',
+      'A forgotten block (slept/away) credits focus only up to planned + max_overtime and is flagged "abandoned"; the true span is kept. Use --full to record it all (D-012).',
     ],
     next: [
       'To record the current phase before ending, `pomo skip` first, then stop.',
@@ -397,9 +409,9 @@ export const COMMAND_HELP = Object.freeze({
       'The user wants more or less detail in the status line. Display-only; it never changes timing. Read first (no argument) to report the current layout.',
     usage: 'pomo view [minimal|classic|full] [--json]',
     flags: [
-      { flag: 'minimal', desc: 'icon + time only' },
-      { flag: 'classic', desc: 'icon + time + cycle (default)' },
-      { flag: 'full', desc: 'adds label and today stats' },
+      { flag: 'minimal', desc: 'icon + time + bar' },
+      { flag: 'classic', desc: 'icon + time + bar + cycle dots (default)' },
+      { flag: 'full', desc: 'classic + the session label' },
       { flag: '--json', desc: 'print the current/new view as JSON' },
     ],
     examples: [
@@ -536,7 +548,38 @@ export const COMMAND_HELP = Object.freeze({
       'Act on the state: `pomo pause`, `pomo extend`, `pomo skip`, `pomo stop`.',
       'Drill into past sessions with `pomo log`.',
     ],
-    seeAlso: ['log', 'view'],
+    seeAlso: ['log', 'stats', 'view'],
+  },
+
+  stats: {
+    summary:
+      'Show derived analytics: streak, focus heatmap, top tags, by-hour, outcomes.',
+    whenToUse:
+      'The user asks how they are doing over time (trends, streak, where focus goes, when they focus best). This is the analytics READ verb: terminal panel by default, `--web` for the visual dashboard, `--json` to parse. Use `pomo log` instead for the individual block-by-block ledger.',
+    usage: 'pomo stats [--web] [--json]',
+    flags: [
+      {
+        flag: '--web',
+        desc: 'write a self-contained HTML dashboard and open it in the browser',
+      },
+      { flag: '--json', desc: 'machine-readable stats payload (schema-versioned)' },
+    ],
+    examples: [
+      { cmd: 'pomo stats', desc: 'the terminal panel (streak, heatmap, tags)' },
+      { cmd: 'pomo stats --web', desc: 'open the visual dashboard in your browser' },
+      { cmd: 'pomo stats --json', desc: 'stable JSON for an agent or a script' },
+    ],
+    notes: [
+      'Everything is derived from the immutable log on read; there are no stored counters (D-007).',
+      'Times are shown in your LOCAL timezone, while the log itself stays UTC (D-011).',
+      'The dashboard is a self-contained, dependency-free HTML file in the state dir. It contains your labels, so it is not for casual sharing.',
+      'If no browser can be opened (SSH/headless), `--web` prints the file path instead.',
+    ],
+    next: [
+      'Open the visual view with `pomo stats --web`.',
+      'Inspect individual blocks with `pomo log`.',
+    ],
+    seeAlso: ['log', 'status'],
   },
 
   log: {
@@ -833,6 +876,7 @@ export const renderHelp = (topic = null, prefs = {}) => {
     '',
     bold('LOG & DATA'),
     cmdEntry('status', '[--json]', brief('status')),
+    cmdEntry('stats', '[--web] [--json]', brief('stats')),
     cmdEntry('log', '[--today|--date|open|backups]', brief('log')),
     cmdEntry('undo', '[N] [--today] [--dry-run] [--yes]', brief('undo')),
     cmdEntry('restore', '[backup-id]', brief('restore')),
@@ -980,6 +1024,99 @@ export const renderStatus = (state, aggregates, prefs) => {
 export const renderJson = (data) => JSON.stringify(data, null, 2);
 
 // ---------------------------------------------------------------------------
+// Stats panel (M9/D-011) — terminal rendering of the foldStats payload.
+// Reuses the status-line visual language; degrades to plain text when captured.
+// ---------------------------------------------------------------------------
+
+const HEAT_SHADES = ['░', '▒', '▓', '█']; // intensity level 1..4
+const SPARK = ' ▁▂▃▄▅▆▇█';
+
+/** One heatmap cell: a dim dot when empty, a tomato shade by intensity. */
+const heatCell = (level) => (level === 0 ? dim('·') : tomato(HEAT_SHADES[level - 1]));
+
+/** The focus heatmap, 7 rows (Mon..Sun) by one column per week. */
+const renderHeatmap = (weeks) => {
+  const labels = ['Mon', '   ', 'Wed', '   ', 'Fri', '   ', 'Sun'];
+  const rows = [];
+  for (let d = 0; d < 7; d++) {
+    const cells = weeks.map((w) => heatCell(w[d].level)).join('');
+    rows.push(`  ${dim(labels[d])} ${cells}`);
+  }
+  return rows.join('\n');
+};
+
+/** A unicode sparkline over a numeric series, tomato-tinted. */
+const sparkline = (values) => {
+  const max = Math.max(...values, 1);
+  return tomato(values.map((v) => SPARK[Math.round((v / max) * 8)]).join(''));
+};
+
+/** Top-tag horizontal bars (block chars, tomato fill). */
+const renderTagBars = (tags) => {
+  if (tags.length === 0) return ['  ' + dim('No tags yet.')];
+  const max = Math.max(...tags.map((t) => t.focusMin), 1);
+  return tags.map((t) => {
+    const w = Math.max(1, Math.round((t.focusMin / max) * 16));
+    return `  ${t.tag.padEnd(16)} ${tomato('█'.repeat(w))} ${dim(formatFocus(t.focusMin))}`;
+  });
+};
+
+/** The local hour with the most focus, e.g. "11:00", or null if none. */
+const peakHour = (byHour) => {
+  let best = 0;
+  for (let h = 1; h < 24; h++) if (byHour[h] > byHour[best]) best = h;
+  return byHour[best] > 0 ? `${String(best).padStart(2, '0')}:00` : null;
+};
+
+/**
+ * Render the stats panel from a foldStats payload. Pure: returns a string.
+ * @param {import('./types.js').StatsPayload} p
+ * @returns {string}
+ */
+export const renderStats = (p) => {
+  const title = bold(tomato('Claudoro')) + dim(' focus stats');
+
+  if (!p || p.totals.pomodoros === 0) {
+    return [
+      title,
+      '',
+      dim('No focus blocks recorded yet. Run `pomo start` to begin.'),
+    ].join('\n');
+  }
+
+  const head =
+    `${bold(String(p.totals.pomodoros))} ${dim('pomodoros')}  ` +
+    `${bold(formatFocus(p.totals.focusMin))} ${dim('focus')}  ` +
+    `${bold(String(p.totals.daysActive))} ${dim('active days')}`;
+  const streak = `${dim('Streak')}  ${bold(plural(p.streak.current, 'day'))}  ${dim(`(best ${p.streak.best})`)}`;
+  const todayLine =
+    `${dim('Today')}   ${plural(p.today.pomodoros, 'pomodoro')}, ${formatFocus(p.today.focusMin)}` +
+    `${dim('   |   ')}${dim('Week')}  ${plural(p.week.pomodoros, 'pomodoro')}, ${formatFocus(p.week.focusMin)}`;
+  const peak = peakHour(p.byHour);
+
+  return [
+    title,
+    '',
+    '  ' + head,
+    '  ' + streak,
+    '  ' + todayLine,
+    '',
+    dim('  Focus · last 12 weeks'),
+    renderHeatmap(p.heatmap.weeks),
+    '',
+    dim('  Top tags'),
+    ...renderTagBars(p.tags),
+    '',
+    dim('  By hour') + (peak ? dim(`  (peak ${peak})`) : ''),
+    '  ' + sparkline(p.byHour) + dim('  00..23'),
+    '',
+    `  ${green(String(p.outcomes.completed))} ${dim('done')}   ` +
+      `${yellow(String(p.outcomes.skipped))} ${dim('skipped')}   ` +
+      `${red(String(p.outcomes.aborted))} ${dim('stopped')}`,
+  ].join('\n');
+};
+
+// ---------------------------------------------------------------------------
 // Log rendering helpers (M5/M6)
 // ---------------------------------------------------------------------------
 
@@ -1035,9 +1172,16 @@ const formatBackupTime = (id) => {
 const renderLogRow = (record) => {
   const time = `${formatClock(record.started)}-${formatClock(record.ended)}`;
   const icon = ICONS[record.phase]?.() ?? ICONS.focus();
-  const baseDur = formatFocus(record.actual_min ?? record.planned_min ?? 0);
-  const overtime = record.overtime_min > 0 ? dim(`+${record.overtime_min}m`) : '';
-  const dur = overtime ? `${baseDur} ${overtime}` : baseDur;
+  const baseDur = formatFocus(creditedMin(record));
+  let dur;
+  if (wasAbandoned(record)) {
+    // Surface the truth: credited focus plus how long it actually sat (D-012).
+    const ranMin = Math.round((record.ended - record.started) / 60);
+    dur = `${baseDur} ${dim(`(ran ${formatFocus(ranMin)}, abandoned)`)}`;
+  } else {
+    const overtime = record.overtime_min > 0 ? dim(`+${record.overtime_min}m`) : '';
+    dur = overtime ? `${baseDur} ${overtime}` : baseDur;
+  }
 
   let statusWord;
   switch (record.status) {
@@ -1176,7 +1320,7 @@ export const formatRecordLine = (record) => {
     .toISOString()
     .replace('T', ' ')
     .slice(0, 16);
-  const mins = record.actual_min ?? record.planned_min ?? 0;
+  const mins = creditedMin(record);
   const noun = PHASE_NOUN[record.phase] ?? record.phase ?? 'focus';
   const label = record.label ? ` "${record.label}"` : '';
   return `  ${when}  ${mins}min ${noun}${label}`;

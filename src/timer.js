@@ -7,7 +7,12 @@
  * Cadence: focus → short_break → focus → ... → long_break every `frequency` focuses (D-003).
  * Transition modes: auto / balanced / manual (D-006a).
  */
-import { nowEpoch, phaseDuration, isLongBreakDue } from './derive.js';
+import {
+  nowEpoch,
+  phaseDuration,
+  isLongBreakDue,
+  DEFAULT_MAX_OVERTIME_MIN,
+} from './derive.js';
 
 // ---------------------------------------------------------------------------
 // start
@@ -132,7 +137,7 @@ export const toggle = (state, opts = {}) => {
 export const stop = (state, opts = {}) => {
   if (state.run_state === 'idle') return null;
   const now = opts.nowSec ?? nowEpoch();
-  const record = finalizeRecord(state, 'aborted', now);
+  const record = finalizeRecord(state, 'aborted', now, { full: opts.full });
   return {
     state: {
       ...state,
@@ -195,7 +200,7 @@ export const next = (state, opts = {}) => {
   if (state.run_state !== 'running') return null;
   const now = opts.nowSec ?? nowEpoch();
   if (now < state.end_epoch) return null; // not at a boundary yet
-  const record = finalizeRecord(state, 'completed', now);
+  const record = finalizeRecord(state, 'completed', now, { full: opts.full });
   const advanced = advanceTo(state, now);
   return { state: withCheckpoint(state, advanced, now, record.id), record };
 };
@@ -351,35 +356,63 @@ const advanceTo = (state, now) => {
   );
 };
 
-const finalizeRecord = (state, status, now) => ({
-  id: state.current_record_id ?? makeRecordId(state.started, state.set_index),
-  schema: 1,
-  phase: state.phase,
-  mode: state.mode,
-  planned_min: state.planned_min,
-  started: state.started,
-  ended: now,
+const round1 = (sec) => Math.max(0, Math.round((sec / 60) * 10) / 10);
+
+/**
+ * Build the immutable record for a finalized phase.
+ *
+ * Abandoned-time handling (D-012): a forgotten timer finalized far past its end
+ * must not record its whole span as focus. Real elapsed is credited only up to
+ * `planned + max_overtime`; beyond that the record is flagged `abandoned` and
+ * the overflow is dropped. The true span is preserved in `started`/`ended`, so
+ * nothing is lost. `opts.full` opts out (records the true elapsed) for a genuine
+ * marathon. The auto-reconcile path passes `now = end_epoch`, so it never trips
+ * the cap.
+ */
+const finalizeRecord = (state, status, now, opts = {}) => {
   // Clamp ≥ 0 so a backward clock jump can never record negative work.
-  actual_min: Math.max(
-    0,
-    Math.round(((now - state.started - (state.paused_total_sec ?? 0)) / 60) * 10) / 10,
-  ),
-  overtime_min: Math.max(0, Math.round(((now - state.end_epoch) / 60) * 10) / 10),
-  status,
-  pauses: {
-    count: 0, // TODO: track pause intervals
-    total_sec: state.paused_total_sec ?? 0,
-    intervals: [],
-  },
-  config_snapshot: state.config,
-  mute: state.config?.mute ?? false,
-  label: state.label ?? null,
-  set_number: state.set_number,
-  set_index: state.set_index,
-  context: {},
-  provenance: {},
-  pending: [],
-});
+  const rawElapsedSec = Math.max(0, now - state.started - (state.paused_total_sec ?? 0));
+  const rawOvertimeSec = Math.max(0, now - state.end_epoch);
+  const capSec =
+    ((state.config?.max_overtime ?? DEFAULT_MAX_OVERTIME_MIN) + state.planned_min) * 60;
+  const abandoned = rawElapsedSec > capSec;
+
+  const elapsedSec = opts.full || !abandoned ? rawElapsedSec : capSec;
+  const overtimeSec =
+    opts.full || !abandoned
+      ? rawOvertimeSec
+      : Math.min(
+          rawOvertimeSec,
+          (state.config?.max_overtime ?? DEFAULT_MAX_OVERTIME_MIN) * 60,
+        );
+
+  return {
+    id: state.current_record_id ?? makeRecordId(state.started, state.set_index),
+    schema: 1,
+    phase: state.phase,
+    mode: state.mode,
+    planned_min: state.planned_min,
+    started: state.started,
+    ended: now,
+    actual_min: round1(elapsedSec),
+    overtime_min: round1(overtimeSec),
+    abandoned: abandoned && !opts.full,
+    status,
+    pauses: {
+      count: 0, // pause-interval detail is tracked under the D-010 design
+      total_sec: state.paused_total_sec ?? 0,
+      intervals: [],
+    },
+    config_snapshot: state.config,
+    mute: state.config?.mute ?? false,
+    label: state.label ?? null,
+    set_number: state.set_number,
+    set_index: state.set_index,
+    context: {},
+    provenance: {},
+    pending: [],
+  };
+};
 
 const makeRecordId = (startedEpoch, index) =>
   `${new Date(startedEpoch * 1000).toISOString().replace(/\.\d+Z$/, 'Z')}-${index}`;

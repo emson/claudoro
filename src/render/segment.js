@@ -6,7 +6,7 @@
  * View modes (D-004):
  *   minimal  — icon + MM:SS + bar
  *   classic  — + cycle dots (default)
- *   full     — two lines, adds phase word + label + cost
+ *   full     — + the session label (when set and width allows)
  */
 import {
   remaining,

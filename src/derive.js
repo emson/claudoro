@@ -81,6 +81,38 @@ export const phaseDuration = (phase, config) => {
 };
 
 // ---------------------------------------------------------------------------
+// Credited focus (D-012): a forgotten timer must never count its abandoned span.
+// ---------------------------------------------------------------------------
+
+/** Default cap on credited overtime before a phase is treated as abandoned. */
+export const DEFAULT_MAX_OVERTIME_MIN = 30;
+
+/**
+ * Per-record ceiling on credited focus: planned + max_overtime. A record with no
+ * `planned_min` has no meaningful cap (real records always set it), so it is
+ * never clamped — the guard targets forgotten timers, not records lacking context.
+ */
+const overtimeCap = (record) =>
+  record.planned_min == null
+    ? Infinity
+    : record.planned_min +
+      (record.config_snapshot?.max_overtime ?? DEFAULT_MAX_OVERTIME_MIN);
+
+/**
+ * Focus minutes a record may contribute to aggregates: its real `actual_min`,
+ * but never more than `planned + max_overtime`, so a forgotten timer (huge
+ * elapsed) can never poison totals. The same bound is applied at write time in
+ * the timer; this read-time clamp also neutralises legacy or hand-edited
+ * records, with no migration (D-012).
+ */
+export const creditedMin = (record) =>
+  Math.min(record.actual_min ?? record.planned_min ?? 0, overtimeCap(record));
+
+/** True when a record ran past `planned + max_overtime` (a forgotten timer). */
+export const wasAbandoned = (record) =>
+  record.abandoned === true || (record.actual_min ?? 0) > overtimeCap(record);
+
+// ---------------------------------------------------------------------------
 // Record folding
 // ---------------------------------------------------------------------------
 
@@ -105,10 +137,10 @@ export const parseJsonl = (raw) =>
  * Used by `pomo status`, `pomo log`, and after every undo/restore.
  *
  * @param {object[]} records - All records in chronological order
- * @param {string} today - ISO date string 'YYYY-MM-DD'
+ * @param {string} onDay - ISO date string 'YYYY-MM-DD' to count as "today"
  * @returns {{ completedToday: number, focusMinToday: number, setIndex: number, setNumber: number }}
  */
-export const foldRecords = (records, today = new Date().toISOString().slice(0, 10)) => {
+export const foldRecords = (records, onDay = today()) => {
   let completedToday = 0;
   let focusMinToday = 0;
   let setIndex = 0;
@@ -124,10 +156,10 @@ export const foldRecords = (records, today = new Date().toISOString().slice(0, 1
       setNumber += 1;
     }
 
-    const day = epochToDate(r.started);
-    if (day === today) {
+    const day = dateOf(r.started);
+    if (day === onDay) {
       completedToday += 1;
-      focusMinToday += r.actual_min ?? r.planned_min ?? 0;
+      focusMinToday += creditedMin(r);
     }
   }
 
@@ -170,16 +202,19 @@ export const deriveCadence = (records) => {
 // ---------------------------------------------------------------------------
 // Date-bucket helpers
 // ---------------------------------------------------------------------------
-// These derive the calendar day in UTC, matching how log files are named
-// (todayLogFile). Range reads stay aligned with writes by sharing this. The
-// known quirk is that "today" is UTC, not local; fixing it is a one-line change
-// here plus the matching todayLogFile, tracked as a follow-up.
+// `dateOf` is the SINGLE definition of "which calendar day does this epoch fall
+// in" — every other module (history file naming, folding, undo, backups) routes
+// through it, so reads and writes can never disagree about day boundaries.
+// It buckets in UTC; the known quirk is that "today" is therefore UTC, not local
+// (a session finishing late in a UTC-ahead zone may straddle the boundary).
+// Because this is now the one chokepoint, switching to local time is a single
+// edit here, tracked as a follow-up.
 
-/** Today's date bucket 'YYYY-MM-DD' (UTC, matching log file names). */
-export const today = () => new Date().toISOString().slice(0, 10);
-
-/** The date bucket for an epoch-seconds timestamp. */
+/** The date bucket for an epoch-seconds timestamp, 'YYYY-MM-DD'. */
 export const dateOf = (epochSec) => new Date(epochSec * 1000).toISOString().slice(0, 10);
+
+/** Today's date bucket 'YYYY-MM-DD'. */
+export const today = () => dateOf(nowEpoch());
 
 /**
  * Shift an ISO date by `delta` calendar days (delta may be negative).
@@ -205,7 +240,7 @@ export const summarize = (records) => {
   for (const r of records) {
     if (r.phase === 'focus' && r.status === 'completed') {
       completed += 1;
-      focusMin += r.actual_min ?? r.planned_min ?? 0;
+      focusMin += creditedMin(r);
     }
   }
   return { completed, focusMin, total: records.length };
@@ -214,8 +249,6 @@ export const summarize = (records) => {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const epochToDate = (epochSec) => new Date(epochSec * 1000).toISOString().slice(0, 10);
 
 /**
  * Progress fraction 0..1 (elapsed / planned), clamped.
