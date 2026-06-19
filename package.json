@@ -52,7 +52,7 @@
   "homepage": "https://github.com/emson/claudoro#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.19.21",
+    "@types/node": "^26.0.0",
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.6.0",
