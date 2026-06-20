@@ -14,6 +14,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   same cap at read time (`derive.creditedMin`), so stats are robust to existing and hand-edited
   records with no migration. `pomo stop --full` records the true elapsed for a genuine marathon;
   `pomo start --max-overtime N` tunes the threshold. `pomo log` shows abandoned blocks honestly.
+  A waiting boundary (manual/balanced) left in overtime past the same threshold now auto-closes to
+  idle (keeping full planned credit) instead of showing `+overtime` indefinitely.
 - `pomo stats` (M9, D-011): derived analytics folded from the immutable log on read — current and
   best day-streak, a 12-week focus heatmap, top tags, focus-by-hour, and the outcome mix. Renders
   three ways from one pure `foldStats` payload: a terminal panel (default), a self-contained,

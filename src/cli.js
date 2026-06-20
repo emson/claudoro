@@ -3,7 +3,7 @@
  * Each verb is an async function that receives { positional, flags, env }.
  * Side effects (printing, process.exit) happen here; timer.js stays pure.
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import {
@@ -234,6 +234,40 @@ const cmdStop = async ({ flags }) => {
   } else {
     console.log('Stopped.');
   }
+};
+
+/**
+ * Force state to idle and immediately kill any detached alarm workers.
+ *
+ * `pomo stop` requires a running phase and goes through the normal transition path.
+ * `pomo kill-all` is the escape hatch: it force-resets state regardless, then kills
+ * _alarm-worker.js processes by name so they don't linger for up to POLL_MS (30 s).
+ * Use when `pkill -f pomo` left orphaned workers behind (workers have no "pomo" in
+ * their argv, so the name filter misses them).
+ */
+const cmdKillAll = async () => {
+  const prev = await mutateState((s) => ({
+    ...s,
+    run_state: 'idle',
+    phase: null,
+    alarm_pid: null,
+    alarms_fired: [],
+    back_checkpoint: null,
+    alarm_seq: (s.alarm_seq ?? 0) + 1,
+  }));
+  const wasRunning = prev.run_state !== 'idle';
+
+  // Hard-kill surviving alarm workers by script name (cross-platform where supported).
+  let killed = 0;
+  if (process.platform !== 'win32') {
+    const result = spawnSync('pkill', ['-f', '_alarm-worker.js'], { encoding: 'utf8' });
+    // pkill exit 0 = matched, 1 = no match, other = error; we treat both 0 and 1 as OK
+    if (result.status === 0) killed = 1; // pkill doesn't give a count; signal success
+  }
+
+  const stateMsg = wasRunning ? 'Timer stopped.' : 'No timer was running.';
+  const workerMsg = killed ? ' Alarm workers killed.' : ' No alarm workers found.';
+  console.log(stateMsg + workerMsg);
 };
 
 const cmdSkip = async () => {
@@ -881,6 +915,7 @@ const VERBS = {
   resume: cmdResume,
   toggle: cmdToggle,
   stop: cmdStop,
+  'kill-all': cmdKillAll,
   skip: cmdSkip,
   reset: cmdReset,
   next: cmdNext,

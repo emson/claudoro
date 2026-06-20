@@ -138,17 +138,7 @@ export const stop = (state, opts = {}) => {
   if (state.run_state === 'idle') return null;
   const now = opts.nowSec ?? nowEpoch();
   const record = finalizeRecord(state, 'aborted', now, { full: opts.full });
-  return {
-    state: {
-      ...state,
-      run_state: 'idle',
-      phase: null,
-      alarm_pid: null,
-      alarms_fired: [],
-      back_checkpoint: null, // stopping invalidates any prior checkpoint
-    },
-    record,
-  };
+  return { state: toIdle(state), record };
 };
 
 // ---------------------------------------------------------------------------
@@ -269,8 +259,12 @@ const boundaryWaits = (mode, fromPhase) =>
  * advances even with no user action and no daemon.
  *
  *   - not running, or not yet at end_epoch → null (nothing to do).
- *   - at a WAITING boundary (per mode) → null: the phase is left running into
- *     overtime; the renderer shows `+M:SS` and the user resolves it with `next`.
+ *   - at a WAITING boundary (per mode) still inside the hold window → null: the
+ *     phase is left running into overtime; the renderer shows `+M:SS` and the
+ *     user resolves it with `next`.
+ *   - at a WAITING boundary held past `max_overtime` → the user has clearly gone:
+ *     finalize the completed phase at its planned end (full credit, never the
+ *     abandoned overflow) and return to idle, rather than wait forever (D-012).
  *   - otherwise (auto into the next phase) → finalize the completed phase
  *     (ended at its planned end, so the detection delay is never counted as
  *     work) and enter the next phase, running.
@@ -280,7 +274,18 @@ const boundaryWaits = (mode, fromPhase) =>
 export const reconcileStep = (state, now) => {
   if (state.run_state !== 'running') return null;
   if (now < state.end_epoch) return null;
-  if (boundaryWaits(state.mode, state.phase)) return null;
+
+  if (boundaryWaits(state.mode, state.phase)) {
+    const maxOverSec = (state.config?.max_overtime ?? DEFAULT_MAX_OVERTIME_MIN) * 60;
+    if (now - state.end_epoch <= maxOverSec) return null; // still within the hold window
+    // Held past the threshold: auto-close to idle. The held phase keeps full
+    // credit for its planned duration (finalized at end_epoch, not abandoned).
+    return {
+      state: toIdle(state),
+      record: finalizeRecord(state, 'completed', state.end_epoch),
+    };
+  }
+
   const record = finalizeRecord(state, 'completed', state.end_epoch);
   const advanced = advanceTo(state, now);
   // The back-window starts from `now` (the detection time), not from end_epoch:
@@ -292,6 +297,20 @@ export const reconcileStep = (state, now) => {
 // ---------------------------------------------------------------------------
 // Phase advancement helpers (internal)
 // ---------------------------------------------------------------------------
+
+/**
+ * Return to idle, keeping the cadence counters (re-derived from records at the
+ * next `start`). Shared by `stop` and the held-boundary auto-close so they
+ * produce the identical idle shape. Never touches `alarm_seq` (only armAlarm does).
+ */
+const toIdle = (state) => ({
+  ...state,
+  run_state: 'idle',
+  phase: null,
+  alarm_pid: null,
+  alarms_fired: [],
+  back_checkpoint: null,
+});
 
 /**
  * Attach a back-checkpoint to `nextState` so `back` can restore `prevState`.

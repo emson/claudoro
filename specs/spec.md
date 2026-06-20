@@ -165,6 +165,7 @@ op (`undo`, `log clear`, direct edit). Rolling retention (keep last K). `restore
 - `back` after the window closed → refuse with guidance (use `start`).
 - Long break vs short break selection uses derived focus count, robust to `undo`.
 - Forgotten timer (slept / walked away) finalized by `stop`/`next` long past its end → credit focus only up to `planned + max_overtime`, flag the record `abandoned`, keep the true span in `started`/`ended` (D-012). `--full` records the true elapsed for a genuine marathon. The auto-reconcile path finalizes at `end_epoch`, so it is already exempt.
+- Waiting boundary (manual/balanced) held in overtime past `max_overtime` → `reconcileStep` auto-closes it to idle (the held phase keeps full planned credit), instead of showing `+overtime` forever; driven from the render path by a cheap `overtimeExceeded` gate (D-012).
 
 **Errors:**
 | Condition | Response | Recovery |

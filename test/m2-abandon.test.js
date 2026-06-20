@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeRunningState } from './helpers.js';
 import * as T from '../src/timer.js';
-import { creditedMin, wasAbandoned } from '../src/derive.js';
+import { creditedMin, wasAbandoned, overtimeExceeded } from '../src/derive.js';
 import { foldStats } from '../src/stats.js';
 
 // makeRunningState: started 1000, end_epoch 2500 (25 min), planned_min 25,
@@ -50,6 +50,49 @@ describe('timer: next / auto-reconcile and the cap', () => {
     const result = T.reconcileStep(makeRunningState(), WAY_LATER);
     assert.equal(result.record.actual_min, 25, 'credited the planned duration');
     assert.equal(result.record.abandoned, false);
+  });
+});
+
+describe('timer: a held boundary auto-closes once forgotten (D-012)', () => {
+  const HELD_LONG = 2500 + 40 * 60; // 40 min past end, beyond the 30-min hold window
+  const HELD_BRIEF = 2500 + 10 * 60; // 10 min past end, still inside the window
+
+  it('auto-closes a manual focus boundary held past max_overtime, with full credit', () => {
+    const result = T.reconcileStep(makeRunningState({ mode: 'manual' }), HELD_LONG);
+    assert.equal(
+      result.state.run_state,
+      'idle',
+      'returns to idle, not +overtime forever',
+    );
+    assert.equal(result.state.phase, null);
+    assert.equal(result.record.actual_min, 25, 'planned duration credited');
+    assert.equal(
+      result.record.abandoned,
+      false,
+      'the focus itself was real, not abandoned',
+    );
+  });
+
+  it('still holds a boundary that is only briefly overdue', () => {
+    assert.equal(T.reconcileStep(makeRunningState({ mode: 'manual' }), HELD_BRIEF), null);
+  });
+
+  it('does not change the auto path (advances, never auto-closes)', () => {
+    const result = T.reconcileStep(makeRunningState(), HELD_LONG); // mode auto
+    assert.equal(result.state.run_state, 'running');
+    assert.equal(result.state.phase, 'short_break');
+  });
+
+  it('overtimeExceeded gates the render-path reconcile cheaply', () => {
+    assert.equal(overtimeExceeded(makeRunningState({ mode: 'manual' }), HELD_LONG), true);
+    assert.equal(
+      overtimeExceeded(makeRunningState({ mode: 'manual' }), HELD_BRIEF),
+      false,
+    );
+    assert.equal(
+      overtimeExceeded(makeRunningState({ run_state: 'idle' }), HELD_LONG),
+      false,
+    );
   });
 });
 

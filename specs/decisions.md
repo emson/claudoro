@@ -948,6 +948,12 @@ the only discriminator available at finalize time.
 - **The override.** `pomo stop --full` / `pomo next --full` record the true elapsed (the rare
   genuine marathon); the threshold is `max_overtime`, captured at start (flag > default, like
   `back_window`), default **30 min**, so real overtime is never clipped.
+- **Auto-close a held boundary.** A waiting boundary (manual/balanced) left in overtime past the
+  same `max_overtime` threshold is auto-closed to idle by `reconcileStep` (the held phase keeps full
+  credit for its planned duration), rather than showing `+overtime` forever. The status line drives
+  this via a cheap `overtimeExceeded` gate (no extra hot-path imports); the worker/render reconcile
+  path needs no new plumbing. The same threshold serves both the credit cap and the auto-close, so
+  there is one knob, not two.
 - **Scope boundary.** This fixes the *duration* pollution (the reported bug). The *count* inflation
   from an awake `auto` cascade is prevented by D-010 (idle auto-pause) and recovered by `undo`; it
   is deliberately not re-solved here, because auto-dropping completed records would violate D-007.
@@ -959,6 +965,6 @@ construction, forever, without migration. The change is small and centralised: o
 working because the credited value flows through the same field.
 
 **Revisit if:** users report real overtime being clipped (raise the default or make the threshold a
-persisted pref); an OS-idle signal lands (D-010) and can distinguish present-overtime from absence
-precisely (then credit by presence, not magnitude); or demand appears to also auto-close a phase
-left holding in overtime past the threshold (today it shows `+overtime` until the user acts).
+persisted pref); or an OS-idle signal lands (D-010) and can distinguish present-overtime from
+absence precisely (then credit by presence, not magnitude, and auto-close on true idle rather than
+on elapsed threshold).

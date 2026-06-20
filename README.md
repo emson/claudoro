@@ -245,7 +245,9 @@ record `abandoned`. The true span is kept, and `pomo log` shows it as `25m focus
 abandoned)`. Your stats are never inflated, even for records logged before this guard existed.
 
 If the long run really was deliberate work, `pomo stop --full` records the full elapsed time. Raise
-the threshold for a session with `pomo start --max-overtime N`.
+the threshold for a session with `pomo start --max-overtime N`. In `manual`/`balanced` mode a phase
+left waiting in overtime past the same threshold auto-closes to idle (keeping full credit) rather
+than counting up forever.
 
 </details>
 

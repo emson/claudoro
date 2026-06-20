@@ -14,7 +14,7 @@
 import { readState, readPrefs } from './store-read.js';
 import { renderSegment } from './render/segment.js';
 import { renderPassthrough } from './render/passthrough.js';
-import { nowEpoch, cuesDue } from './derive.js';
+import { nowEpoch, cuesDue, overtimeExceeded } from './derive.js';
 import { segmentColorMode } from './output.js';
 
 // Hard reset bracketing the whole line. The segment opens with a bare colour
@@ -46,13 +46,15 @@ export const render = async () => {
 
     // Opportunistic alarm claim + boundary reconcile (D-009 belt-and-suspenders).
     // Only pay the cost of loading the alarm module on the rare tick where a cue
-    // is actually due, so the common hot path stays cheap (D-005). This backs up
-    // the detached one-shot: if it died, the next render fires the cue AND
-    // advances the phase. A due cue only ever fires once (atomic claim), so this
-    // does not spawn per-tick — only at the boundary.
-    if (cuesDue(state, nowSec).length > 0) {
+    // is actually due, or when a held boundary has been forgotten past the
+    // abandon threshold and needs auto-closing (D-012), so the common hot path
+    // stays cheap (D-005). This backs up the detached one-shot: if it died, the
+    // next render fires the cue AND advances (or auto-closes) the phase. A due
+    // cue only ever fires once (atomic claim), so this does not spawn per-tick.
+    const due = cuesDue(state, nowSec);
+    if (due.length > 0 || overtimeExceeded(state, nowSec)) {
       const { claimAlarmIfDue, reconcileAndReschedule } = await import('./alarm.js');
-      await claimAlarmIfDue(state).catch(() => {});
+      if (due.length > 0) await claimAlarmIfDue(state).catch(() => {});
       await reconcileAndReschedule().catch(() => {});
     }
 

@@ -128,6 +128,16 @@ export const creditedMin = (record) =>
 export const wasAbandoned = (record) =>
   record.abandoned === true || (record.actual_min ?? 0) > overtimeCap(record);
 
+/**
+ * Cheap render-path gate (D-012): is a running phase overdue by more than
+ * `max_overtime`? The status line uses this to decide whether to drive a
+ * reconcile (auto-closing a forgotten held boundary) without importing the
+ * timer/alarm modules. `reconcileStep` stays the authority on whether to close.
+ */
+export const overtimeExceeded = (state, nowSec = nowEpoch()) =>
+  overtimeSec(state, nowSec) >
+  (state.config?.max_overtime ?? DEFAULT_MAX_OVERTIME_MIN) * 60;
+
 // ---------------------------------------------------------------------------
 // Record folding
 // ---------------------------------------------------------------------------
