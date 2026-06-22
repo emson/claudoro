@@ -37,10 +37,26 @@ timer costs you no extra glance and no context switch.
 
 **Prerequisite:** Node ≥ 22 (already present if you installed Claude Code via npm).
 
+**From npm (once published):**
+
 ```bash
 npm install -g claudoro
 pomo setup
 ```
+
+**From source (development / pre-release):**
+
+```bash
+git clone https://github.com/emson/claudoro.git
+cd claudoro
+npm install
+npm link          # creates the global `pomo` binary pointing at this checkout
+pomo setup
+```
+
+`npm link` makes the `pomo` command available globally while keeping the source directory as the
+live copy, so `git pull` picks up changes immediately without re-installing. To remove it later:
+`npm unlink -g claudoro`.
 
 `pomo setup` wires Claudoro into Claude Code: it writes the `/pomo` command file, merges the
 `statusLine` block into your `settings.json` (backing it up first), and records everything it
