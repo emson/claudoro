@@ -108,7 +108,11 @@ These map directly to acceptance criteria (`specs/spec.md`). Do not regress them
 ## Testing
 
 - `npm run check` runs the full gate: `lint` → `format:check` → `typecheck` (tsc) → `test`. CI
-  runs it on Node 22 + 24 across macOS/Linux/Windows. Run it before every PR.
+  runs it on Node 22 + 24 across macOS/Linux/Windows. **Run it before every PR and before pushing.**
+- A `pre-push` git hook enforces this automatically. It is wired up via `npm install` (the
+  `prepare` script runs `git config core.hooksPath .githooks`). The hook lives in `.githooks/pre-push`
+  and is committed to the repo so every contributor gets it. Skip with `git push --no-verify` only
+  when you have a specific reason (e.g. pushing a WIP branch for CI to catch).
 - Pure functions get fast unit tests (timer math, derivation, rendering, formatting).
 - Side-effecting behaviour (locking, atomic writes, alarm claim, setup/uninstall) gets integration
   tests against a temp state dir via `makeTempEnv()`; never touch the developer's real `~/.claude`

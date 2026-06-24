@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Runs the full check gate before every push: lint → format → typecheck → tests.
+# Skip with: git push --no-verify (use sparingly).
+npm run check
