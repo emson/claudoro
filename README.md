@@ -18,10 +18,7 @@ reliable alarm that fires even when the status line is hidden or every session i
 
 </div>
 
-> [!NOTE]
-> _Demo placeholder._ Add an asciinema cast or GIF here: a terminal timer sells itself in
-> motion. Record with `asciinema rec`, or capture a short GIF of the countdown ticking and the
-> alarm firing, and drop it in `docs/`.
+https://github.com/emson/claudoro/releases/download/v1.0.0/claudoro-demo.mp4
 
 No separate app. No alt-tab. No broken focus. The countdown is in the one place you're already
 looking, and it keeps ticking while you and Claude work.
