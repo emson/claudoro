@@ -9,7 +9,7 @@ reliable alarm that fires even when the status line is hidden or every session i
 
 [![CI](https://github.com/emson/claudoro/actions/workflows/ci.yml/badge.svg)](https://github.com/emson/claudoro/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/claudoro.svg)](https://www.npmjs.com/package/claudoro)
-[![node](https://img.shields.io/node/v/claudoro.svg)](https://nodejs.org)
+[![node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](https://nodejs.org)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ```text
