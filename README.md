@@ -18,7 +18,7 @@ reliable alarm that fires even when the status line is hidden or every session i
 
 </div>
 
-https://github.com/emson/claudoro/releases/download/v1.0.0/claudoro-demo.mp4
+<video src="https://github.com/user-attachments/assets/cad66a27-6685-4aac-928e-a261caf0b510" controls width="100%"></video>
 
 No separate app. No alt-tab. No broken focus. The countdown is in the one place you're already
 looking, and it keeps ticking while you and Claude work.
