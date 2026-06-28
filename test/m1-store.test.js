@@ -5,6 +5,8 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { makeTempEnv, makeIdleState } from './helpers.js';
 import {
   readState,
@@ -90,13 +92,15 @@ describe('M1: store', () => {
 
 describe('M1: paths', () => {
   it('claudoroPaths respects XDG_STATE_HOME override', () => {
-    const paths = claudoroPaths({ XDG_STATE_HOME: '/tmp/test-state' });
-    assert.ok(paths.stateDir.startsWith('/tmp/test-state'));
+    const stateBase = join(tmpdir(), 'test-state');
+    const paths = claudoroPaths({ XDG_STATE_HOME: stateBase });
+    assert.ok(paths.stateDir.startsWith(stateBase));
     assert.ok(paths.stateFile.endsWith('state.json'));
   });
 
   it('claudoroPaths respects XDG_CONFIG_HOME override', () => {
-    const paths = claudoroPaths({ XDG_CONFIG_HOME: '/tmp/test-config' });
-    assert.ok(paths.prefsFile.startsWith('/tmp/test-config'));
+    const configBase = join(tmpdir(), 'test-config');
+    const paths = claudoroPaths({ XDG_CONFIG_HOME: configBase });
+    assert.ok(paths.prefsFile.startsWith(configBase));
   });
 });

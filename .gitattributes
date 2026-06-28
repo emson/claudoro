@@ -1,0 +1,4 @@
+# Enforce LF line endings on all platforms.
+# Overrides any client-side core.autocrlf setting, which on Windows defaults
+# to true and would convert LF->CRLF on checkout, breaking Prettier's format check.
+* text=auto eol=lf
