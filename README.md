@@ -173,6 +173,10 @@ pomo guide --web    # open it as a web page
 pomo guide --json   # the structured content for an agent or script
 ```
 
+<p align="center">
+  <img src="docs/images/claudoro-web-guide.png" alt="The Claudoro Pomodoro guide rendered as a self-contained web page" width="800">
+</p>
+
 ## Stats and dashboard
 
 `pomo stats` answers "how am I doing over time?" without leaving the terminal: current streak,
@@ -201,6 +205,10 @@ pomo stats          # the terminal panel
 pomo stats --web    # the visual dashboard in your browser
 pomo stats --json   # stable JSON for an agent or a script
 ```
+
+<p align="center">
+  <img src="docs/images/claudoro-web-stats.png" alt="The Claudoro stats dashboard rendered as a self-contained web page" width="800">
+</p>
 
 The dashboard lives at `~/.local/state/claudoro/dashboard.html`. It contains your session labels,
 so treat it as private (it is never uploaded anywhere). Delete it any time; the next run rebuilds it.
