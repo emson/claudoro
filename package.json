@@ -1,6 +1,6 @@
 {
   "name": "claudoro",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Pomodoro timer for Claude Code — live countdown in the status line, render-decoupled alarm",
   "type": "module",
   "engines": {
