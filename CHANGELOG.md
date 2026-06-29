@@ -7,6 +7,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-06-29
+
+### Added
+- `pomo uninstall --purge` (M7): optionally delete the data dir (history, stats, backups, timer
+  state) as part of uninstall. Irreversible and gated behind `--yes`; without it, prints a dry run
+  of exactly what would be removed, mirroring `pomo undo`.
+
+### Changed
+- `pomo uninstall` is now plugin-aware: it reads Claude Code's plugin registry and warns when a
+  Claudoro plugin is installed, because the plugin's SessionStart hook would otherwise re-wire on
+  the next session unless the plugin is also removed via `/plugin`. The README "Uninstall" section
+  now documents the full layered, ordered teardown (plugin, then wiring, then binary, then data).
+
 ## [0.1.1] — 2026-06-29
 
 ### Added
@@ -90,6 +103,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 - Minimum Node bumped to 22 (Node 20 reached end of life).
 
-[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/emson/claudoro/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/emson/claudoro/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/emson/claudoro/releases/tag/v0.1.0
