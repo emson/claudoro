@@ -10,8 +10,8 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
-  id-token: write # required for npm provenance
+  contents: write  # needed to create GitHub releases
+  id-token: write  # required for npm provenance
 
 jobs:
   publish:
@@ -30,3 +30,16 @@ jobs:
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '')
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: tag,
+              generate_release_notes: true,
+            })
