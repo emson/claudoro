@@ -19,7 +19,14 @@ import {
 import { join } from 'node:path';
 import { claudoroPaths, logFileForDate, todayLogFile } from './platform/paths.js';
 import { withLock } from './platform/lock.js';
-import { parseJsonl, deriveCadence, today, dateOf } from './derive.js';
+import {
+  parseJsonl,
+  deriveCadence,
+  startOfLocalDay,
+  nowEpoch,
+  today,
+  dateOf,
+} from './derive.js';
 import { readState, writeState } from './store-read.js';
 
 /** Write `content` to `file` atomically (temp + rename), like the state store. */
@@ -90,7 +97,12 @@ export const readAllRecords = (env = process.env) =>
  * @param {NodeJS.ProcessEnv} [env]
  */
 const refreshCadenceLocked = (env = process.env) => {
-  const { setIndex, setNumber } = deriveCadence(readAllRecords(env));
+  // Same today-local window as `pomo start` (cli.cmdStart), so undo/restore keep
+  // the dots scoped to the current day rather than re-folding all of history.
+  const { setIndex, setNumber } = deriveCadence(
+    readAllRecords(env),
+    startOfLocalDay(nowEpoch()),
+  );
   const state = readState(env);
   writeState({ ...state, set_index: setIndex, set_number: setNumber }, env);
 };
