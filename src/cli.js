@@ -925,8 +925,11 @@ const cmdSetup = async ({ flags }) => {
   setup(process.env, { quiet: 'quiet' in flags });
 };
 
-const cmdUninstall = async () => {
-  uninstall();
+const cmdUninstall = async ({ flags }) => {
+  uninstall(process.env, {
+    purge: flags.purge === true,
+    confirmed: flags.yes === true,
+  });
 };
 
 const cmdHelp = async ({ positional }) => {
