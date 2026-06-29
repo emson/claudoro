@@ -4,7 +4,7 @@
  * Side effects (printing, process.exit) happen here; timer.js stays pure.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import {
   ensureDirs,
@@ -259,16 +259,24 @@ const cmdKillAll = async () => {
   }));
   const wasRunning = prev.run_state !== 'idle';
 
-  // Hard-kill surviving alarm workers by script name (cross-platform where supported).
-  let killed = 0;
-  if (process.platform !== 'win32') {
-    const result = spawnSync('pkill', ['-f', '_alarm-worker.js'], { encoding: 'utf8' });
-    // pkill exit 0 = matched, 1 = no match, other = error; we treat both 0 and 1 as OK
-    if (result.status === 0) killed = 1; // pkill doesn't give a count; signal success
+  // The alarm_seq bump above already makes every surviving worker self-exit on
+  // its next poll (within POLL_MS) on all platforms, so correctness never depends
+  // on the kill below. On POSIX we additionally pkill for immediacy, anchored on
+  // `node ... _alarm-worker.js` so we don't match an editor/grep/tail opened on
+  // the file. Windows has no pkill; the self-exit is the only (sufficient) path.
+  let workerMsg;
+  if (process.platform === 'win32') {
+    workerMsg = ' Any alarm workers self-exit within a few seconds.';
+  } else {
+    const result = spawnSync('pkill', ['-f', 'node.*_alarm-worker\\.js'], {
+      encoding: 'utf8',
+    });
+    // pkill exit 0 = matched & signalled, 1 = no match; both are fine.
+    workerMsg =
+      result.status === 0 ? ' Alarm workers killed.' : ' No alarm workers found.';
   }
 
   const stateMsg = wasRunning ? 'Timer stopped.' : 'No timer was running.';
-  const workerMsg = killed ? ' Alarm workers killed.' : ' No alarm workers found.';
   console.log(stateMsg + workerMsg);
 };
 
@@ -719,9 +727,20 @@ const logOpen = async (flags) => {
     return;
   }
 
-  // Attach the editor to the current TTY and wait for it to close.
-  const child = spawn(editor, [file], { stdio: 'inherit' });
-  await new Promise((resolve) => child.on('close', resolve));
+  // Attach the editor to the current TTY and wait for it to close. A missing or
+  // multi-word $EDITOR (e.g. "code -w") spawns no process and emits 'error';
+  // without a handler that would be an uncaught exception, so degrade to printing
+  // the path (consistent with the no-$EDITOR branch above).
+  await /** @type {Promise<void>} */ (
+    new Promise((resolve) => {
+      const child = spawn(editor, [file], { stdio: 'inherit' });
+      child.on('close', resolve);
+      child.on('error', () => {
+        console.log(file);
+        resolve();
+      });
+    })
+  );
 };
 
 const cmdLog = async ({ positional, flags }) => {
@@ -937,6 +956,16 @@ const cmdHelp = async ({ positional }) => {
   console.log(renderHelp(positional[0] ?? null, prefs));
 };
 
+/** Read the package version (for `pomo version` / `--version` / `-v`). */
+const pkgVersion = () => {
+  try {
+    const url = new URL('../package.json', import.meta.url);
+    return JSON.parse(readFileSync(url, 'utf8')).version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Dispatch table
 // ---------------------------------------------------------------------------
@@ -979,10 +1008,17 @@ const VERBS = {
 // ---------------------------------------------------------------------------
 
 export const main = async (argv) => {
-  ensureDirs();
-
   const { positional, flags } = parseArgs(argv);
   const verb = positional[0] ?? 'help';
+
+  // Pure info command: short-circuit before any directory creation or dispatch.
+  if (flags.version || verb === 'version' || verb === '-v') {
+    console.log(pkgVersion());
+    return;
+  }
+
+  ensureDirs();
+
   const handler = VERBS[verb];
 
   if (!handler) {

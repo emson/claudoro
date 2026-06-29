@@ -77,7 +77,14 @@ export const readState = (env = process.env) => {
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object');
-    return parsed;
+    // Merge over IDLE_STATE so a valid-but-partial state (an older schema, or a
+    // hand-edited file missing fields) falls back to defaults instead of feeding
+    // `undefined` into time math (which would surface as NaN on the render path).
+    return {
+      ...IDLE_STATE,
+      ...parsed,
+      config: { ...IDLE_STATE.config, ...parsed.config },
+    };
   } catch {
     // Quarantine corrupt file; never crash the status-line render
     const quarantine = join(stateDir, `.state.json.corrupt-${Date.now()}`);

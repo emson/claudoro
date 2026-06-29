@@ -30,7 +30,10 @@ const emit = (line) => console.log(segmentColorMode() ? `${RESET}${line}${RESET}
  */
 export const render = async () => {
   const ccJson = await readStdin();
-  const columns = parseInt(process.env.COLUMNS ?? '80', 10);
+  // `??` only catches null/undefined, so an exported-but-empty COLUMNS='' would
+  // give parseInt('') = NaN and silently drop the bar/dots/label. Guard for it.
+  const parsedCols = parseInt(process.env.COLUMNS || '80', 10);
+  const columns = Number.isFinite(parsedCols) ? parsedCols : 80;
 
   // Per-pane opt-out: export CLAUDORO_HIDE=1 in a shell to suppress the segment (D-009)
   if (process.env.CLAUDORO_HIDE) {

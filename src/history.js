@@ -210,8 +210,12 @@ export const findAllForToday = (env = process.env) =>
 /**
  * Remove the given records (cross-day).
  * Writes a backup unconditionally before mutating, then rewrites each affected
- * day file atomically. The whole operation runs under the same lock as state
- * mutations so a concurrent finalize-append can never be lost (D-007).
+ * day file atomically. Runs under the shared lock, so it is serialized against
+ * state mutations and other undo/restore calls. Note: `appendRecord` is a
+ * lock-free atomic O_APPEND (records are well under PIPE_BUF), so a finalize that
+ * lands between this read and rewrite could be dropped; that race is accepted
+ * because finalize-appends are sparse and undo is interactive (the unconditional
+ * backup also bounds the blast radius).
  * Returns the backup id.
  */
 export const undoRecords = (records, env = process.env) => {

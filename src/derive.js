@@ -69,6 +69,19 @@ export const formatMMSS = (totalSec) => {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 };
 
+/**
+ * Format minutes as a human-readable focus duration: "2h 05m", "45m", "0m".
+ * Single source for both the terminal stats panel and the HTML dashboard, so the
+ * two surfaces fed by one payload can never drift on rounding or separators.
+ * @param {number} min
+ * @returns {string}
+ */
+export const formatFocusMin = (min) => {
+  const m = Math.round(min);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+};
+
 /** Current time as integer epoch seconds. Centralised so tests can override. */
 export const nowEpoch = () => Math.floor(Date.now() / 1000);
 
@@ -162,25 +175,20 @@ export const parseJsonl = (raw) =>
  * Fold an array of PhaseRecords into derived aggregates.
  * Used by `pomo status`, `pomo log`, and after every undo/restore.
  *
+ * Cycle position (set_index/set_number) is NOT derived here: `deriveCadence` is
+ * its single authoritative source, so this fold returns only today's totals and
+ * cannot drift from the dots.
+ *
  * @param {object[]} records - All records in chronological order
  * @param {string} onDay - ISO date string 'YYYY-MM-DD' to count as "today"
- * @returns {{ completedToday: number, focusMinToday: number, setIndex: number, setNumber: number }}
+ * @returns {{ completedToday: number, focusMinToday: number }}
  */
 export const foldRecords = (records, onDay = today()) => {
   let completedToday = 0;
   let focusMinToday = 0;
-  let setIndex = 0;
-  let setNumber = 1;
 
   for (const r of records) {
     if (r.status !== 'completed' || r.phase !== 'focus') continue;
-
-    const frequency = r.config_snapshot?.frequency ?? 4;
-    setIndex += 1;
-    if (setIndex > frequency) {
-      setIndex = 1;
-      setNumber += 1;
-    }
 
     const day = dateOf(r.started);
     if (day === onDay) {
@@ -189,7 +197,7 @@ export const foldRecords = (records, onDay = today()) => {
     }
   }
 
-  return { completedToday, focusMinToday, setIndex, setNumber };
+  return { completedToday, focusMinToday };
 };
 
 /**
@@ -236,8 +244,16 @@ export const deriveCadence = (records) => {
 // Because this is now the one chokepoint, switching to local time is a single
 // edit here, tracked as a follow-up.
 
-/** The date bucket for an epoch-seconds timestamp, 'YYYY-MM-DD'. */
-export const dateOf = (epochSec) => new Date(epochSec * 1000).toISOString().slice(0, 10);
+/**
+ * The date bucket for an epoch-seconds timestamp, 'YYYY-MM-DD'. Total function:
+ * a non-finite input (a hand-edited or partial record with a missing/garbage
+ * `started`) buckets to the epoch rather than throwing on `new Date(NaN)`, so a
+ * single bad record can never crash a fold (`pomo status`) or an undo.
+ */
+export const dateOf = (epochSec) =>
+  Number.isFinite(epochSec)
+    ? new Date(epochSec * 1000).toISOString().slice(0, 10)
+    : '1970-01-01';
 
 /** Today's date bucket 'YYYY-MM-DD'. */
 export const today = () => dateOf(nowEpoch());
