@@ -5,7 +5,7 @@ status line plus a render-decoupled end-of-block alarm. Open source, distributed
 `npm install -g claudoro` with a thin Claude Code plugin wrapper.
 
 **Read first:** `specs/spec.md` (architecture, modules, data model, acceptance tests) and
-`specs/decisions.md` (D-001..D-009, the authoritative rationale). The spec supersedes
+`specs/decisions.md` (D-001..D-012, the authoritative rationale). The spec supersedes
 `specs/charter.md` where they disagree. When in doubt, the decisions log wins.
 
 ## Core principle
@@ -39,7 +39,7 @@ into larger behaviour. Avoid complex code; if a function is hard to name or test
   Missing state → `idle`; corrupt JSON → quarantine + reinit; never throw on the render path.
 - **Explicit over implicit.** No hidden globals, no ambient singletons. Dependencies (paths, clock,
   fs) are passed in, which also makes them trivially mockable in tests.
-- **Small modules with one job**, mirroring the spec's M1..M8. A file should fit in your head.
+- **Small modules with one job**, mirroring the spec's M1..M10. A file should fit in your head.
 
 ## Project conventions
 

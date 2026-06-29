@@ -7,7 +7,42 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [0.1.3] — 2026-06-29
+### Added
+- `pomo version` (also `--version` / `-v`): print the installed package version.
+
+### Fixed
+- `pomo log open` no longer crashes on a missing or multi-word `$EDITOR` (e.g. `code -w`); it
+  degrades to printing the file path, matching the no-`$EDITOR` branch.
+- `dateOf` is now a total function: a hand-edited or partial record with a missing/garbage
+  `started` buckets to the epoch instead of throwing `Invalid time value`, so one bad record can no
+  longer crash `pomo status` or an undo.
+- `readState` merges a valid-but-partial state over the idle defaults, so an older-schema or
+  hand-edited file cannot feed `undefined` into the time math (no more `NaN` on the render path).
+- `pomo uninstall` now stops a running timer first (idle + bumped `alarm_seq`), so the detached
+  alarm worker self-exits and the headless timer cannot survive teardown or `--purge`.
+- `setup` no longer captures its own status line as `previous` when re-run after a lost manifest,
+  and reports honestly (no false success) when `settings.json` is unparseable; both made uninstall
+  unable to cleanly remove the wiring before.
+- Help/log/restore columns now align on a color TTY (column width measures visible glyphs, not the
+  invisible ANSI bytes).
+- `statusline` handles an exported-but-empty `COLUMNS=''` (was `NaN`, which dropped the bar/dots).
+- OS notifications strip control characters from the label, so a label with a newline no longer
+  silently loses the notification on macOS.
+- `pomo kill-all` tightens the worker `pkill` pattern (anchored on `node ... _alarm-worker.js`, so
+  it cannot match an editor/grep open on the file) and reports honestly on Windows (workers
+  self-exit via the `alarm_seq` bump, which is the actual cross-platform mechanism).
+
+### Changed
+- One shared focus-duration formatter (`derive.formatFocusMin`) feeds both the terminal stats panel
+  and the HTML dashboard, so the two surfaces cannot drift; `foldRecords` no longer derives a
+  divergent (and unused) cycle position, leaving `deriveCadence` the single source for the dots.
+- Documentation consistency sweep: README marks the package as published, documents the
+  `note`/`tag`/`label`/`version` verbs and the `CLAUDORO_EMOJI`/`CLAUDORO_LINKS` env vars (and drops
+  the unimplemented `CLAUDORO_MOTION`); the `pomo help` index lists `note`/`tag`/`guide`; the
+  decisions range is D-001..D-012; `plugin.json` tracks the package version; the release workflow
+  pins the same `actions/checkout` as CI; and the changelog headings use hyphens (house rule).
+
+## [0.1.3] - 2026-06-29
 
 ### Added
 - README screenshots of the web guide and the web stats dashboard, shown in the "Learn the
@@ -23,7 +58,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `pomo guide` linked to a Pomodoro Technique reference URL that 404'd; pointed it at the official
   site (`https://www.pomodorotechnique.com/`).
 
-## [0.1.2] — 2026-06-29
+## [0.1.2] - 2026-06-29
 
 ### Added
 - `pomo uninstall --purge` (M7): optionally delete the data dir (history, stats, backups, timer
@@ -36,7 +71,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the next session unless the plugin is also removed via `/plugin`. The README "Uninstall" section
   now documents the full layered, ordered teardown (plugin, then wiring, then binary, then data).
 
-## [0.1.1] — 2026-06-29
+## [0.1.1] - 2026-06-29
 
 ### Added
 - `pomo guide` (M10): a standalone Pomodoro Technique guide tailored to Claudoro, rendered three
@@ -56,7 +91,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Release workflow pinned a non-existent `actions/checkout@v7`, which would have failed every tag
   publish; corrected to `@v4` (matching the earlier CI workflow fix).
 
-## [0.1.0] — 2026-06-29
+## [0.1.0] - 2026-06-29
 
 ### Added
 - Abandoned-time handling (D-012): a forgotten timer (slept / walked away) finalized by `stop` or
