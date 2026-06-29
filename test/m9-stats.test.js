@@ -157,11 +157,20 @@ describe('stats: renderStatsHtml is self-contained and safe (TEST-M9-002)', () =
     assert.match(html, /&lt;script&gt;/, 'label is HTML-escaped');
   });
 
-  it('references no external host (offline, self-contained)', () => {
+  it('loads no external resources (offline, self-contained)', () => {
+    // D-011 is about not fetching on load: no scripts, no external src/link.
+    // Inert anchors (e.g. the footer author links) are fine; they fetch nothing.
     const html = renderStatsHtml(foldStats([rec(now, 0)], now));
-    assert.doesNotMatch(html, /https?:\/\//, 'no remote URLs');
-    assert.doesNotMatch(html, /\ssrc=/, 'no external resources');
     assert.doesNotMatch(html, /<script/i, 'no client-side script at all');
+    assert.doesNotMatch(html, /\ssrc=/, 'no external resources');
+    assert.doesNotMatch(html, /<link/i, 'no external stylesheet');
+  });
+
+  it('includes the shared author/project footer', () => {
+    const html = renderStatsHtml(foldStats([rec(now, 0)], now));
+    assert.match(html, /<footer class="site">/);
+    assert.match(html, /benemson\.com/);
+    assert.match(html, /github\.com\/emson\/claudoro/);
   });
 
   it('is a complete HTML document with no em-dash', () => {

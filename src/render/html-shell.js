@@ -37,7 +37,20 @@ export const BASE_CSS = `
   .gen { color:var(--muted); font-size:.8rem; }
   section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:1.25rem 1.5rem; margin-bottom:1.25rem; }
   h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 1rem; }
-  .empty { color:var(--muted); }`;
+  .empty { color:var(--muted); }
+  footer.site { margin-top:2rem; text-align:center; color:var(--muted); font-size:.82rem; }
+  footer.site a { color:var(--tomato); text-decoration:none; }
+  footer.site a:hover { text-decoration:underline; }
+  footer.site .sep { margin:0 .5rem; opacity:.5; }`;
+
+// Shared footer: author and project links. Inert anchors (no resource loads), so
+// the page stays self-contained and renders offline (D-011).
+const SITE_FOOTER = `
+    <footer class="site">
+      Claudoro by <a href="https://benemson.com">Ben Emson</a>
+      <span class="sep">&middot;</span><a href="https://x.com/emson">@emson</a>
+      <span class="sep">&middot;</span><a href="https://github.com/emson/claudoro">GitHub</a>
+    </footer>`;
 
 /**
  * Wrap page content in the complete branded document shell.
@@ -69,6 +82,7 @@ ${css}
       <span class="gen">${gen}</span>
     </header>
 ${body}
+${SITE_FOOTER}
   </div>
 </body>
 </html>
