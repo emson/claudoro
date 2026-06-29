@@ -13,6 +13,7 @@ import {
   isLongBreakDue,
   foldRecords,
   deriveCadence,
+  startOfLocalDay,
   parseJsonl,
   progressFraction,
   cuesDue,
@@ -217,6 +218,60 @@ describe('derive: deriveCadence', () => {
     assert.deepEqual(deriveCadence(full.slice(0, 2)), { setIndex: 1, setNumber: 1 });
     // simulate undoing everything (the reported bug: should reset to empty dots)
     assert.deepEqual(deriveCadence([]), { setIndex: 0, setNumber: 1 });
+  });
+});
+
+describe('derive: deriveCadence day window (daily reset) + startOfLocalDay', () => {
+  const DAY = 86_400;
+  const F = (started, status = 'completed') => ({ phase: 'focus', status, started });
+  const LB = (started, status = 'completed') => ({
+    phase: 'long_break',
+    status,
+    started,
+  });
+
+  it('startOfLocalDay returns a local midnight at/before now and is idempotent', () => {
+    const now = 1_750_000_000;
+    const mid = startOfLocalDay(now);
+    assert.ok(mid <= now);
+    assert.equal(startOfLocalDay(mid), mid, 'midnight maps to itself');
+    // a record exactly at midnight is in-window; one a second earlier is not
+    assert.equal(deriveCadence([F(mid)], mid).setIndex, 1);
+    assert.equal(deriveCadence([F(mid - 1)], mid).setIndex, 0);
+  });
+
+  it('default window (0) folds all history (backward compatible)', () => {
+    assert.equal(deriveCadence([F(1000), F(2000), F(3000)]).setIndex, 3);
+  });
+
+  it('ignores records before the window: a fresh day after a busy one', () => {
+    const todayMid = 100 * DAY;
+    const yesterday = [
+      F(todayMid - DAY + 9 * 3600),
+      F(todayMid - DAY + 10 * 3600),
+      F(todayMid - DAY + 11 * 3600),
+    ];
+    assert.equal(deriveCadence(yesterday, todayMid).setIndex, 0, 'reset for today');
+    assert.equal(deriveCadence(yesterday, 0).setIndex, 3, 'lifetime still counts');
+  });
+
+  it('counts only today and still honors a within-day long break', () => {
+    const todayMid = 100 * DAY;
+    const recs = [
+      F(todayMid - DAY), // yesterday (excluded)
+      F(todayMid + 1 * 3600),
+      F(todayMid + 2 * 3600),
+      F(todayMid + 3 * 3600),
+      F(todayMid + 4 * 3600),
+      LB(todayMid + 4 * 3600 + 1800), // long break resets within today
+      F(todayMid + 5 * 3600),
+    ];
+    assert.deepEqual(deriveCadence(recs, todayMid), { setIndex: 1, setNumber: 2 });
+  });
+
+  it('buckets a midnight-straddling block by its start day (not counted today)', () => {
+    const todayMid = 100 * DAY;
+    assert.equal(deriveCadence([F(todayMid - 600)], todayMid).setIndex, 0);
   });
 });
 

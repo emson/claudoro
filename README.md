@@ -112,6 +112,10 @@ Three view modes, switchable any time with `/pomo view <mode>`:
 The segment is **absent when idle**, so starting and stopping never shifts your layout. Your
 existing status-line info (model · context% · git) is preserved alongside it, never clobbered.
 
+The cycle dots (`●●○○`) show how many focus blocks you've done toward the next long break. They
+reset to `○○○○` each day (at your local midnight) and whenever a long break completes, so a fresh
+day always starts empty.
+
 ## Durations and cadence
 
 All four durations are overridable per run. Flags, not a config file:

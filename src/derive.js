@@ -212,14 +212,22 @@ export const foldRecords = (records, onDay = today()) => {
  * phases never advanced, so they are ignored. Robust to undo by construction:
  * remove records, re-fold, and the position is correct.
  *
+ * `sinceEpoch` bounds the window: records that started before it are ignored, so
+ * passing the start of today gives a fresh cycle each day (the dots reset at
+ * local midnight) without storing anything. Records are bucketed by `started`
+ * (consistent with the rest of the day-bucketing), so a block that straddles
+ * midnight counts toward the day it began. Default 0 folds all of history.
+ *
  * @param {object[]} records - All records in chronological order
+ * @param {number} [sinceEpoch] - ignore records started before this (epoch secs)
  * @returns {{ setIndex: number, setNumber: number }}
  */
-export const deriveCadence = (records) => {
+export const deriveCadence = (records, sinceEpoch = 0) => {
   let setIndex = 0;
   let setNumber = 1;
 
   for (const r of records) {
+    if ((r.started ?? 0) < sinceEpoch) continue; // outside the window (e.g. earlier days)
     if (r.status !== 'completed' && r.status !== 'skipped') continue;
     if (r.phase === 'focus') {
       setIndex += 1;
@@ -231,6 +239,20 @@ export const deriveCadence = (records) => {
   }
 
   return { setIndex, setNumber };
+};
+
+/**
+ * Epoch seconds of the most recent LOCAL midnight at or before `nowSec`. Used to
+ * scope the cycle to today: the log stores UTC instants, but the dots reset at
+ * the user's local midnight (the same store-UTC / present-local split as stats,
+ * D-011). DST-safe: `setHours(0,0,0,0)` resolves local midnight correctly.
+ * @param {number} nowSec
+ * @returns {number}
+ */
+export const startOfLocalDay = (nowSec) => {
+  const d = new Date(nowSec * 1000);
+  d.setHours(0, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
 };
 
 // ---------------------------------------------------------------------------

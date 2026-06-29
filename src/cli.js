@@ -56,6 +56,7 @@ import {
   nowEpoch,
   foldRecords,
   deriveCadence,
+  startOfLocalDay,
   today,
   shiftDate,
 } from './derive.js';
@@ -170,7 +171,9 @@ const cmdStart = async ({ positional, flags }) => {
 
   // Derive the cycle position from records so a fresh start reflects real
   // history, never a stale counter left by undo or a hand-edited log (D-007).
-  const cadence = deriveCadence(readAllRecords());
+  // Scoped to today (local), so the dots start fresh each day rather than
+  // carrying a saturated count across days.
+  const cadence = deriveCadence(readAllRecords(), startOfLocalDay(nowEpoch()));
 
   const { changed, state } = await applyTransition((s) =>
     T.start(s, { config, mode, label, sessionId, cadence }),

@@ -11,6 +11,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `pomo version` (also `--version` / `-v`): print the installed package version.
 
 ### Fixed
+- Cycle dots now reset each day. The cadence is derived over today's records only (scoped to your
+  local midnight), so a fresh day starts at ○○○○ instead of carrying a saturated count across days.
+  A within-day long break still resets the set as before; blocks are bucketed by start time
+  (consistent with the rest of the day-bucketing), so one straddling midnight counts toward the day
+  it began. Derived, not stored, so it self-corrects with no migration.
 - `pomo log open` no longer crashes on a missing or multi-word `$EDITOR` (e.g. `code -w`); it
   degrades to printing the file path, matching the no-`$EDITOR` branch.
 - `dateOf` is now a total function: a hand-edited or partial record with a missing/garbage
