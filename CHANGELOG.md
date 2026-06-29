@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-06-29
+
+### Added
+- README screenshots of the web guide and the web stats dashboard, shown in the "Learn the
+  technique" and "Stats and dashboard" sections. The images live in `docs/images/` (versioned with
+  the docs, kept out of the npm tarball); npm rewrites the relative paths to GitHub for the package
+  page, so they render in both places without bloating the published package.
+
+### Fixed
+- `pomo guide` linked to a Pomodoro Technique reference URL that 404'd; pointed it at the official
+  site (`https://www.pomodorotechnique.com/`).
+
 ## [0.1.2] — 2026-06-29
 
 ### Added
@@ -103,7 +115,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 - Minimum Node bumped to 22 (Node 20 reached end of life).
 
-[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/emson/claudoro/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/emson/claudoro/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/emson/claudoro/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/emson/claudoro/releases/tag/v0.1.0
