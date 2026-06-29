@@ -348,6 +348,14 @@ opening a PR.
 The flag interface and classic cadence follow [pymodoro](https://github.com/rogeralmeida/pymodoro),
 so anyone migrating gets zero relearning.
 
+## Author
+
+Built by Ben Emson.
+
+- Website: [benemson.com](https://benemson.com)
+- X / Twitter: [@emson](https://x.com/emson)
+- Repository: [github.com/emson/claudoro](https://github.com/emson/claudoro)
+
 ## License
 
-[MIT](LICENSE) © Ben Emson
+[MIT](LICENSE) © [Ben Emson](https://benemson.com)

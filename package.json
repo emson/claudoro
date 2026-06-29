@@ -42,7 +42,10 @@
     "plugin"
   ],
   "license": "MIT",
-  "author": "Ben Emson",
+  "author": {
+    "name": "Ben Emson",
+    "url": "https://benemson.com"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/emson/claudoro.git"

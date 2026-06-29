@@ -14,6 +14,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   technique" and "Stats and dashboard" sections. The images live in `docs/images/` (versioned with
   the docs, kept out of the npm tarball); npm rewrites the relative paths to GitHub for the package
   page, so they render in both places without bloating the published package.
+- Author and project links (website, X/@emson, GitHub repo): a README "Author" section, an enriched
+  npm `author` field, and a shared footer on the web guide and stats dashboard pages (added once in
+  `render/html-shell.js`, so both pages stay consistent). The footer uses inert anchors, so the
+  pages remain self-contained and offline.
 
 ### Fixed
 - `pomo guide` linked to a Pomodoro Technique reference URL that 404'd; pointed it at the official

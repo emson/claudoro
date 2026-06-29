@@ -105,6 +105,13 @@ describe('M10 guide: renderGuideHtml is self-contained and safe', () => {
     assert.match(html, /<a href="https:\/\/en\.wikipedia\.org[^"]*">/);
   });
 
+  it('includes the shared author/project footer', () => {
+    const html = renderGuideHtml(GUIDE);
+    assert.match(html, /<footer class="site">/);
+    assert.match(html, /benemson\.com/);
+    assert.match(html, /x\.com\/emson/);
+  });
+
   it('is a complete HTML document with no em-dash', () => {
     const html = renderGuideHtml(GUIDE);
     assert.match(html, /^<!doctype html>/);
