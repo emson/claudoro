@@ -7,6 +7,8 @@ import {
   remaining,
   isOvertime,
   formatMMSS,
+  formatFocusMin,
+  dateOf,
   nextPhase,
   isLongBreakDue,
   foldRecords,
@@ -96,11 +98,39 @@ describe('derive: isLongBreakDue', () => {
   });
 });
 
+describe('derive: dateOf is total (never throws on bad input)', () => {
+  it('buckets a finite epoch normally', () => {
+    assert.equal(dateOf(Date.parse('2026-06-17T09:00:00Z') / 1000), '2026-06-17');
+  });
+
+  it('returns the epoch sentinel for a non-finite started, instead of throwing', () => {
+    assert.doesNotThrow(() => dateOf(undefined));
+    assert.equal(dateOf(undefined), '1970-01-01');
+    assert.equal(dateOf(NaN), '1970-01-01');
+    assert.equal(dateOf('garbage'), '1970-01-01');
+  });
+});
+
+describe('derive: formatFocusMin', () => {
+  it('formats minutes as the shared "Xh YYm" / "Zm" form', () => {
+    assert.equal(formatFocusMin(45), '45m');
+    assert.equal(formatFocusMin(125), '2h 05m');
+    assert.equal(formatFocusMin(0), '0m');
+  });
+});
+
 describe('derive: foldRecords', () => {
   it('returns zeros for empty records', () => {
     const r = foldRecords([], '2026-06-17');
     assert.equal(r.completedToday, 0);
     assert.equal(r.focusMinToday, 0);
+  });
+
+  it('does not throw on a record with a missing/garbage started', () => {
+    const bad = [
+      { phase: 'focus', status: 'completed', planned_min: 25, actual_min: 25 },
+    ];
+    assert.doesNotThrow(() => foldRecords(bad, '2026-06-17'));
   });
 
   it('counts only completed focus records for today', () => {
