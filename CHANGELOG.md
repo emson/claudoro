@@ -7,6 +7,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-06-29
+
+### Added
+- `pomo guide` (M10): a standalone Pomodoro Technique guide tailored to Claudoro, rendered three
+  ways from one static content model — a terminal panel (default), a self-contained HTML page
+  (`--web`) styled like the stats dashboard, and stable JSON (`--json`). Covers the method, the
+  rules that make it work, handling interruptions, edge cases mapped to Claudoro features, cadence
+  tuning, and references.
+- Maintainer docs: `RELEASING.md` (the release runbook, including the provenance publish flow),
+  `ROADMAP.md`, and a "Maintaining & releasing" section in `CLAUDE.md`. `CONTRIBUTING.md` gains the
+  M9/M10 module map and a docs-update checklist; `SECURITY.md` notes provenance-signed releases.
+
+### Changed
+- Extracted the shared HTML theme and document shell into `render/html-shell.js`, now used by both
+  the stats dashboard and the guide, so the two pages cannot drift visually.
+
+### Fixed
+- Release workflow pinned a non-existent `actions/checkout@v7`, which would have failed every tag
+  publish; corrected to `@v4` (matching the earlier CI workflow fix).
+
 ## [0.1.0] — 2026-06-29
 
 ### Added
@@ -70,5 +90,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 - Minimum Node bumped to 22 (Node 20 reached end of life).
 
-[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/emson/claudoro/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/emson/claudoro/releases/tag/v0.1.0
