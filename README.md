@@ -34,7 +34,7 @@ timer costs you no extra glance and no context switch.
 
 **Prerequisite:** Node ≥ 22 (already present if you installed Claude Code via npm).
 
-**From npm (once published):**
+**From npm:**
 
 ```bash
 npm install -g claudoro
@@ -78,12 +78,17 @@ within about a second. **That's the under-2-minute path.**
 /pomo view [minimal|classic|full]
 /pomo mute | unmute
 
+/pomo note "text"   add to the current block's label (supports #tags)
+/pomo tag name      add a #tag to the current block
+/pomo label "text"  replace the current block's label
+
 /pomo log           today's completed blocks
 /pomo stats         analytics: streak, focus heatmap, top tags (--web for the dashboard)
 /pomo undo [N]      remove the last N records (backup written first)
 /pomo restore       restore from a backup
 
 /pomo guide         the Pomodoro Technique, tailored to Claudoro (--web for a web page)
+/pomo version       print the installed version
 /pomo help [command]
 ```
 
@@ -228,8 +233,9 @@ export CLAUDORO_HIDE=1
 | Variable               | Default              | Effect                                       |
 | ---------------------- | -------------------- | -------------------------------------------- |
 | `CLAUDORO_HIDE`        | unset                | Suppress the segment in this shell           |
-| `CLAUDORO_MOTION`      | `full`               | `full` \| `reduced` \| `off` (blink, flourish) |
 | `CLAUDORO_COLOR`       | `auto`               | `auto` \| `always` \| `never`                |
+| `CLAUDORO_EMOJI`       | `auto`               | `always` \| `never` (force or disable the icon glyphs) |
+| `CLAUDORO_LINKS`       | `auto`               | `always` \| `never` (OSC 8 click targets)    |
 | `CLAUDORO_PASSTHROUGH` | `model,context,git`  | Which fields to show alongside               |
 | `NO_COLOR`             | unset                | Standard no-color flag (honoured)            |
 | `XDG_STATE_HOME`       | `~/.local/state`     | Override state directory                     |
@@ -335,7 +341,7 @@ Claude Code ──~1s, JSON on stdin──▶ pomo statusline ──read──�
 - **Dashboard:** `~/.local/state/claudoro/dashboard.html` (rebuilt by `pomo stats --web`)
 
 Full design: [`specs/spec.md`](specs/spec.md) (modules, data model, acceptance tests) and
-[`specs/decisions.md`](specs/decisions.md) (the D-001…D-009 rationale).
+[`specs/decisions.md`](specs/decisions.md) (the D-001…D-012 rationale).
 
 ## Contributing
 

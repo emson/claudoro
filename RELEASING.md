@@ -31,6 +31,8 @@ confusing 404.)
    `[X.Y.Z] - YYYY-MM-DD`, add a fresh empty `[Unreleased]` above it, and update the compare links
    at the bottom.
 3. **Bump the version:** `npm version X.Y.Z --no-git-tag-version` (edits `package.json` only).
+   Keep `plugin/plugin.json`'s `version` in lockstep (it ships in the tarball and advertises the
+   marketplace plugin version).
 4. **Commit:** `git commit -am "chore(release): vX.Y.Z"` and push `main`. The pre-push hook runs
    `npm run check`; let CI confirm green before tagging.
 5. **Tag and push the tag:**

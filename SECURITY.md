@@ -14,8 +14,10 @@ Claudoro is a local-first CLI. It has **no network access**, **no runtime depend
 runs entirely with the privileges of the user who invokes it. Relevant properties:
 
 - **Local only.** No data leaves the machine. History and state live under your XDG state dir.
-- **No `postinstall` scripts.** Wiring into Claude Code is an explicit, transparent `pomo setup`
-  step, never a hidden install hook (see `specs/decisions.md` D-005).
+- **No install-time scripts for consumers.** There is no `postinstall`; the only lifecycle script,
+  `prepare`, configures the local git hooks path for contributors and does not run on a registry
+  `npm install -g claudoro`. Wiring into Claude Code is an explicit, transparent `pomo setup` step,
+  never a hidden install hook (see `specs/decisions.md` D-005).
 - **Strict parsing.** State and history are parsed as plain JSON; no `eval`, no code loaded from
   data files.
 - **Backups before destructive ops.** `undo` / `log clear` write a timestamped backup first.

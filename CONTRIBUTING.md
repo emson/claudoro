@@ -28,12 +28,15 @@ Each `src/` file maps to a spec module:
 | `src/platform/paths.js` | M1 | XDG/Windows path resolution (pure) |
 | `src/platform/lock.js` | M1 | Atomic file locking |
 | `src/platform/notify.js` | M4 | Cross-platform sound/notification |
-| `src/store.js` | M1 | Atomic state read/write; `applyTransition` |
-| `src/derive.js` | M1 | Aggregate derivation + time math (pure) |
+| `src/store.js` | M1 | Atomic (locked) state read/modify/write; `applyTransition` |
+| `src/store-read.js` | M1 | Lock-free state/prefs I/O for the hot path |
+| `src/derive.js` | M1 | Aggregate derivation + time/format helpers (pure) |
+| `src/label.js` | M1/M5 | Label/tag parsing for `note`/`tag`/`label` |
 | `src/types.js` | — | JSDoc domain types (LiveState, PhaseRecord, Config, Prefs) |
 | `src/cli.js` | M1 | Arg parsing and verb dispatch |
 | `src/timer.js` | M2 | Phase state machine and cadence |
 | `src/statusline.js` | M3 | Per-tick status-line renderer |
+| `src/platform/open.js` | M9/M10 | Cross-platform browser/file opener |
 | `src/alarm.js` | M4 | Detached one-shot alarm |
 | `src/history.js` | M5 | JSONL records, undo, restore, backups |
 | `src/output.js` | M6 | TTY-aware help and output rendering |
