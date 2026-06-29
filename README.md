@@ -324,7 +324,7 @@ involvement, so the core feature never costs API tokens.
 Claude Code ──~1s, JSON on stdin──▶ pomo statusline ──read──▶ state.json
      │ /pomo → !`pomo $ARGUMENTS`                                ▲ atomic write (lock)
      ▼                                                           │
- user input ───────────────────────────────▶ pomo <verb> ───────┘
+ user input ───────────────────────────────▶ pomo <verb> ────────┘
                                                   │ spawn detached
                                                   ▼
                                            alarm one-shot ──▶ sound / notification
