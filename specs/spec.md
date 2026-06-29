@@ -342,6 +342,40 @@ or a schema-versioned JSON object.
 | Cannot write `dashboard.html` | clear error, non-zero exit | fix perms, re-run |
 | Browser launch fails | print the file path | open it manually |
 
+### M10. Pomodoro guide
+
+**Does:** teach the Pomodoro Technique, tailored to how Claudoro works. One static content model
+(`GUIDE`) rendered three ways from the same source, exactly like M9: a terminal panel (default), a
+self-contained HTML page (`--web`), and stable JSON (`--json`).
+
+**Inputs:** verb `guide [--web] [--json]`. No log, no clock, no state: the content is static, so the
+guide reads the same whether or not a timer is running.
+
+**Outputs:** an ANSI/Unicode panel to stdout; or a written `guide.html` plus a browser launch; or a
+schema-versioned JSON object.
+
+**Behaviour:**
+1. `GUIDE` (in `src/guide.js`) is a frozen, plain-data content model: an intro, an ordered list of
+   sections (each with optional prose, steps, bullets, command examples, and edge-case/mitigation
+   pairs), and a references list. Content is data, not markup.
+2. `renderGuide` (terminal) and `renderGuideHtml` (`render/guide-html.js`) both fold over `GUIDE`,
+   so the surfaces cannot drift. The terminal renderer reuses the M6 palette and degrades to plain
+   text when captured (D-008); the HTML renderer shares the M9 theme and document shell via
+   `render/html-shell.js`, emitting a fully static, dependency-free page with every string escaped.
+3. `--web` writes `guide.html` to the state dir and opens it best-effort; if no opener is available
+   it prints the path. `--json` emits `GUIDE` verbatim.
+
+**Edge Cases:**
+- No browser / SSH / headless → `--web` prints the path; the terminal panel always works.
+- Narrow terminal → prose word-wraps; an unbreakable token (a reference URL) is left intact.
+- House rule: no em-dashes anywhere in the content (enforced by a test over the whole model).
+
+**Errors:**
+| Condition | Response | Recovery |
+|---|---|---|
+| Cannot write `guide.html` | clear error, non-zero exit | fix perms, re-run |
+| Browser launch fails | print the file path | open it manually |
+
 ## API / Interfaces
 
 ### `pomo` CLI command surface
@@ -490,6 +524,7 @@ Traced to charter Success Criteria (SC#1-6); SC#5 is revised per D-009.
 | (D-008) output discipline | TEST-M6-001 | ✓ Full |
 | (D-011) stats fold + HTML | TEST-M9-001, TEST-M9-002 | ✓ Full |
 | (D-012) abandoned-time credit | TEST-M2-004 | ✓ Full |
+| (M10) Pomodoro guide, 3 surfaces | test/m10-guide.test.js | ✓ Full |
 
 Test specs are generated progressively (baseline per behaviour path + error condition; more from
 simulation). Baseline set:

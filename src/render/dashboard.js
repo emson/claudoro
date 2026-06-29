@@ -5,15 +5,12 @@
  * network, no CDN — it renders offline forever and is a rebuildable artifact.
  * Every user-supplied string (labels, tags) is HTML-escaped, so a hand-edited
  * label can never inject markup (XSS-safe by construction).
+ *
+ * The shared theme, escape helper, and document shell live in html-shell.js so
+ * this dashboard and the Pomodoro guide cannot drift apart visually.
  */
 
-const escapeHtml = (s) =>
-  String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+import { escapeHtml, htmlDocument } from './html-shell.js';
 
 /** Minutes as "2h 05m" / "45m". */
 const fmtFocus = (min) => {
@@ -115,34 +112,8 @@ const hourBars = (byHour) => {
     .join('');
 };
 
-/**
- * Render the dashboard.
- * @param {import('../types.js').StatsPayload} p
- * @param {{ generatedAt?: string }} [opts]
- * @returns {string} a complete HTML document
- */
-export const renderStatsHtml = (p, opts = {}) => {
-  const generated = opts.generatedAt ? `Generated ${escapeHtml(opts.generatedAt)}` : '';
-  const { totals, today, week, streak, outcomes } = p;
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claudoro stats</title>
-<style>
-  :root { --tomato:#e4572e; --ink:#23201e; --muted:#8a817c; --line:#ece8e5; --bg:#faf8f6; --card:#fff; }
-  * { box-sizing:border-box; }
-  body { margin:0; padding:2rem 1.25rem 4rem; background:var(--bg); color:var(--ink);
-    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
-  .wrap { max-width:920px; margin:0 auto; }
-  header { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:.5rem; margin-bottom:1.5rem; }
-  h1 { font-size:1.5rem; margin:0; }
-  h1 .t { color:var(--tomato); }
-  .gen { color:var(--muted); font-size:.8rem; }
-  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:1.25rem 1.5rem; margin-bottom:1.25rem; }
-  h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 1rem; }
+// Widgets unique to the dashboard; the shared theme lives in html-shell.js.
+const DASHBOARD_CSS = `
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1rem; }
   .kpi { padding:.25rem 0; }
   .kpi-value { font-size:1.9rem; font-weight:650; line-height:1.1; }
@@ -173,17 +144,18 @@ export const renderStatsHtml = (p, opts = {}) => {
   td.st-skipped { color:#b8860b; }
   td.st-aborted { color:#b8341a; }
   td.lbl { width:100%; }
-  .aband { color:var(--muted); font-size:.72rem; border:1px solid var(--line); border-radius:4px; padding:0 .3rem; }
-  .empty { color:var(--muted); }
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
-      <h1><span class="t">&#127813; Claudoro</span> focus stats</h1>
-      <span class="gen">${generated}</span>
-    </header>
+  .aband { color:var(--muted); font-size:.72rem; border:1px solid var(--line); border-radius:4px; padding:0 .3rem; }`;
 
+/**
+ * Render the dashboard.
+ * @param {import('../types.js').StatsPayload} p
+ * @param {{ generatedAt?: string }} [opts]
+ * @returns {string} a complete HTML document
+ */
+export const renderStatsHtml = (p, opts = {}) => {
+  const { totals, today, week, streak, outcomes } = p;
+
+  const body = `
     <section>
       <h2>Overview</h2>
       <div class="kpis">
@@ -232,9 +204,13 @@ ${kpiCard('This week', `${week.pomodoros} done`, fmtFocus(week.focusMin))}
     <section>
       <h2>Recent sessions</h2>
       ${recentRows(p.recent ?? [])}
-    </section>
-  </div>
-</body>
-</html>
-`;
+    </section>`;
+
+  return htmlDocument({
+    title: 'Claudoro stats',
+    headline: 'focus stats',
+    css: DASHBOARD_CSS,
+    body,
+    generatedAt: opts.generatedAt,
+  });
 };

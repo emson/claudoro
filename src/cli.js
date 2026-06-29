@@ -18,6 +18,8 @@ import { claudoroPaths } from './platform/paths.js';
 import { openPath } from './platform/open.js';
 import { foldStats } from './stats.js';
 import { renderStatsHtml } from './render/dashboard.js';
+import { GUIDE, renderGuide } from './guide.js';
+import { renderGuideHtml } from './render/guide-html.js';
 import * as T from './timer.js';
 import {
   appendRecord,
@@ -556,6 +558,33 @@ export const cmdStats = async ({ flags }, deps = { open: openPath }) => {
   console.log(renderStats(payload));
 };
 
+/**
+ * The Pomodoro guide (M10): one static content model, three surfaces, mirroring
+ * cmdStats. Terminal panel (default), `--web` self-contained HTML, `--json` data.
+ * `deps.open` is injectable so tests can assert the path-printing branch.
+ */
+export const cmdGuide = async ({ flags }, deps = { open: openPath }) => {
+  if (flags.json) {
+    console.log(renderJson(GUIDE));
+    return;
+  }
+
+  if (flags.web) {
+    const { guideFile } = claudoroPaths();
+    const generatedAt = new Date(nowEpoch() * 1000).toISOString();
+    writeFileSync(guideFile, renderGuideHtml(GUIDE, { generatedAt }), 'utf8');
+    const opened = deps.open(guideFile);
+    console.log(
+      opened
+        ? `Guide opened in your browser:\n  ${guideFile}`
+        : `Guide written. Open it in a browser:\n  ${guideFile}`,
+    );
+    return;
+  }
+
+  console.log(renderGuide(GUIDE));
+};
+
 // ISO date validation pattern
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -930,6 +959,7 @@ const VERBS = {
   unmute: (ctx) => cmdMute({ ...ctx, positional: ['unmute'] }),
   status: cmdStatus,
   stats: cmdStats,
+  guide: cmdGuide,
   log: cmdLog,
   undo: cmdUndo,
   restore: cmdRestore,

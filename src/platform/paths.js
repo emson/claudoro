@@ -59,6 +59,7 @@ export const claudoroPaths = (env = process.env) => {
     backupsDir: join(stateDir, 'backups'),
     manifestFile: join(stateDir, 'manifest.json'),
     dashboardFile: join(stateDir, 'dashboard.html'),
+    guideFile: join(stateDir, 'guide.html'),
     prefsFile: join(configDir, 'prefs.json'),
     claudeDir,
     commandsDir: join(claudeDir, 'commands'),
