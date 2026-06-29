@@ -21,6 +21,8 @@ runs entirely with the privileges of the user who invokes it. Relevant propertie
 - **Backups before destructive ops.** `undo` / `log clear` write a timestamped backup first.
 - **Settings safety.** `pomo setup` backs up `settings.json` before merging and never clobbers
   an unparseable file.
+- **Signed provenance.** Releases are published from CI with [npm provenance](https://docs.npmjs.com/generating-provenance-statements),
+  a verifiable link from the published package back to this repo and the build that produced it.
 
 Things that are **not** vulnerabilities: a malicious actor who already has write access to your
 home directory or `settings.json` (they can do anything you can); sound/notification behaviour on

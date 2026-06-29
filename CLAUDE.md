@@ -80,6 +80,7 @@ Claude Code ──~1s, JSON on stdin──▶ pomo statusline ──read──�
 | **M7 Setup/uninstall** | wire/unwire Claude Code (command file, `statusLine` merge, hooks, manifest); idempotent; clean reversal (D-005) |
 | **M8 Command file & plugin** | bare `/pomo` command file + thin marketplace plugin (D-001/D-002) |
 | **M9 Stats & dashboard** | pure `foldStats` over the log → terminal panel / self-contained HTML / JSON; local-time presentation over UTC storage (D-011) |
+| **M10 Pomodoro guide** | static `GUIDE` content model → terminal panel / self-contained HTML / JSON; HTML shell shared with M9 (`render/html-shell.js`) |
 
 ## Non-negotiable invariants
 
@@ -124,9 +125,29 @@ These map directly to acceptance criteria (`specs/spec.md`). Do not regress them
 
 ## Layout
 
-`bin/pomo.js` (entry, with a lazy fast-path for `statusline`), `src/` modules per M1..M9
-(`platform/` for OS edges, `render/` for the segment and the HTML dashboard, `stats.js` for the
-analytics fold), `src/types.js` (domain typedefs),
+`bin/pomo.js` (entry, with a lazy fast-path for `statusline`), `src/` modules per M1..M10
+(`platform/` for OS edges, `render/` for the segment, the HTML dashboard, the HTML guide, and the
+shared `html-shell.js`; `stats.js` for the analytics fold; `guide.js` for the guide content model),
+`src/types.js` (domain typedefs),
 `test/` mirroring the modules. Pure timer transitions return `{state, record?}` or `null`;
 `store.applyTransition` runs them under the lock and reports `{changed, state, prev, record}`, so
 callers drive side effects off `changed` rather than re-inspecting state.
+
+## Maintaining & releasing
+
+Process docs live outside this file; the detail is there, not here.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, code map, PRs), [`RELEASING.md`](RELEASING.md) (the
+release runbook), [`ROADMAP.md`](ROADMAP.md) (direction), [`SECURITY.md`](SECURITY.md) (reporting),
+[`CHANGELOG.md`](CHANGELOG.md) (Keep a Changelog).
+
+- **Gate before every push.** `npm run check` (lint, format, typecheck, tests); the `pre-push` hook
+  enforces it. CI re-runs across Node 22/24 on macOS/Linux/Windows.
+- **Change behaviour, update its surfaces in the same PR:** user-facing change → `README.md` plus
+  the verb's `COMMAND_HELP` in `output.js`; anything notable → `CHANGELOG.md` `[Unreleased]`;
+  architecture → `specs/spec.md` + its coverage matrix; a tradeoff → a new `specs/decisions.md`
+  entry. A new verb also needs a `VERBS` entry and a test.
+- **Releasing is a tag push, never a manual `npm publish`.** Bump the version, roll
+  `[Unreleased]` into `[X.Y.Z]` in the changelog, then push `vX.Y.Z`: the Release workflow runs the
+  gate, publishes to npm with provenance, and opens the GitHub release. Full steps in `RELEASING.md`.
+- **Zero runtime dependencies, local-first, no telemetry.** These are invariants, not preferences;
+  a PR that adds a runtime dep or a network call needs a decision entry first.
