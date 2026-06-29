@@ -8,6 +8,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { makeTempEnv } from './helpers.js';
 import { setup, uninstall } from '../src/setup.js';
 import { claudoroPaths } from '../src/platform/paths.js';
@@ -23,6 +24,31 @@ const quiet = (fn) => {
     console.log = log;
     console.warn = warn;
   }
+};
+
+/** Run a call and return everything it printed, for asserting on warnings. */
+const capture = (fn) => {
+  const { log, warn } = console;
+  const lines = [];
+  console.log = (...a) => lines.push(a.join(' '));
+  console.warn = (...a) => lines.push(a.join(' '));
+  try {
+    fn();
+  } finally {
+    console.log = log;
+    console.warn = warn;
+  }
+  return lines.join('\n');
+};
+
+/** Write a Claude Code plugin registry that lists Claudoro as installed. */
+const installPluginRegistry = (paths, key = 'claudoro@test-marketplace') => {
+  mkdirSync(dirname(paths.installedPluginsFile), { recursive: true });
+  writeFileSync(
+    paths.installedPluginsFile,
+    JSON.stringify({ version: 2, plugins: { [key]: [{ scope: 'user' }] } }),
+    'utf8',
+  );
 };
 
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
@@ -178,5 +204,56 @@ describe('M7: never clobbers a corrupt settings.json', () => {
       corrupt,
       'corrupt settings still untouched after uninstall',
     );
+  });
+});
+
+describe('M7: uninstall is plugin-aware', () => {
+  let env, cleanup, paths;
+  beforeEach(() => {
+    ({ env, cleanup } = makeTempEnv());
+    paths = claudoroPaths(env);
+  });
+  afterEach(() => cleanup());
+
+  it('warns that a plugin install will re-wire on the next session', () => {
+    quiet(() => setup(env));
+    installPluginRegistry(paths);
+
+    const out = capture(() => uninstall(env));
+    assert.match(out, /installed as a Claude Code plugin/);
+    assert.match(out, /claudoro@test-marketplace/);
+    assert.match(out, /\/plugin/);
+  });
+
+  it('stays silent about plugins when none is installed', () => {
+    quiet(() => setup(env));
+    const out = capture(() => uninstall(env));
+    assert.doesNotMatch(out, /plugin/i);
+  });
+});
+
+describe('M7: uninstall --purge', () => {
+  let env, cleanup, paths;
+  beforeEach(() => {
+    ({ env, cleanup } = makeTempEnv());
+    paths = claudoroPaths(env);
+  });
+  afterEach(() => cleanup());
+
+  it('without --yes is a dry run: keeps the data dir and prints the confirm hint', () => {
+    quiet(() => setup(env));
+    assert.ok(existsSync(paths.stateDir), 'data dir exists after setup');
+
+    const out = capture(() => uninstall(env, { purge: true }));
+    assert.ok(existsSync(paths.stateDir), 'data dir preserved without --yes');
+    assert.match(out, /--purge --yes/);
+  });
+
+  it('with --yes permanently removes the data dir', () => {
+    quiet(() => setup(env));
+    assert.ok(existsSync(paths.stateDir), 'data dir exists after setup');
+
+    quiet(() => uninstall(env, { purge: true, confirmed: true }));
+    assert.ok(!existsSync(paths.stateDir), 'data dir removed');
   });
 });

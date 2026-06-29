@@ -65,6 +65,9 @@ export const claudoroPaths = (env = process.env) => {
     commandsDir: join(claudeDir, 'commands'),
     pomoCmdFile: join(claudeDir, 'commands', 'pomo.md'),
     claudeSettings: join(claudeDir, 'settings.json'),
+    // Claude Code's plugin registry. Used to detect a plugin install of Claudoro
+    // (whose SessionStart hook would re-wire after `pomo uninstall`).
+    installedPluginsFile: join(claudeDir, 'plugins', 'installed_plugins.json'),
   };
 };
 

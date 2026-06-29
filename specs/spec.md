@@ -283,12 +283,16 @@ op (`undo`, `log clear`, direct edit). Rolling retention (keep last K). `restore
 **Behaviour:**
 1. `setup` (idempotent, marker-guarded): write the `/pomo` command file (absolute path to `pomo` so PATH is non-critical); back up `settings.json` (timestamped) then merge the `statusLine` command; register hooks; record every change in the manifest.
 2. `uninstall`: read the manifest and reverse exactly, restoring any pre-existing `statusLine` from backup. `npm uninstall -g claudoro` removes the binary.
+3. `uninstall` is **plugin-aware**: it reads Claude Code's plugin registry (`installed_plugins.json`) and, when a Claudoro plugin is present, warns that the plugin's SessionStart hook will re-wire on the next session unless the plugin is also removed (via `/plugin`). Unwiring alone is insufficient when installed as a plugin.
+4. `uninstall --purge` additionally removes the data dir (history, stats, backups, state). User data is **kept by default**; purge is irreversible and gated behind `--yes` (a dry run that prints the target path otherwise), mirroring `undo`'s confirmation pattern.
 
 **Edge Cases:**
 - `settings.json` missing → create; invalid JSON → never clobber, back up + print the manual snippet.
 - Existing custom `statusLine` → back up, record original in manifest, install ours, log a notice (wrapping is a v2 item, D-004).
 - Concurrent write by Claude Code → atomic temp + rename.
 - Re-run → idempotent (marker), no duplicate entries.
+- Plugin registry absent or unparseable → treated as "no plugin" (no warning), never throws.
+- `--purge` with no data dir → reports nothing to remove; `--purge` without `--yes` never deletes.
 
 **Errors:**
 | Condition | Response | Recovery |

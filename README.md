@@ -280,9 +280,28 @@ than counting up forever.
 
 ## Uninstall
 
+Claudoro attaches in up to four independent layers; remove them in this order.
+
 ```bash
-pomo uninstall          # remove the /pomo command file, restore your prior statusLine
-npm uninstall -g claudoro
+# 1. (Only if installed as a Claude Code plugin) remove the plugin FIRST.
+#    Its SessionStart hook re-runs `pomo setup`, so unwiring before this gets
+#    silently undone on your next session. Use the /plugin manager in Claude Code.
+
+# 2. Unwire from Claude Code: removes the /pomo command file and restores your
+#    prior status line from backup. `pomo uninstall` warns you if it detects the
+#    plugin from step 1 still installed.
+pomo uninstall
+
+# 3. Remove the binary.
+npm uninstall -g claudoro      # or `npm unlink -g claudoro` for a dev `npm link`
+```
+
+Your history and stats in the state dir are **kept by default**. To delete them too, add
+`--purge` (a dry run that prints what it would remove) and confirm with `--yes`:
+
+```bash
+pomo uninstall --purge          # preview: shows the data dir that would be deleted
+pomo uninstall --purge --yes    # unwire AND permanently delete all history/state (irreversible)
 ```
 
 No orphaned background processes are left behind.

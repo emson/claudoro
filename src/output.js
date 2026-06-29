@@ -750,15 +750,38 @@ export const COMMAND_HELP = Object.freeze({
   uninstall: {
     summary: 'Reverse setup and remove all Claudoro wiring.',
     whenToUse:
-      'The user wants Claudoro removed from Claude Code, restoring their prior status line.',
-    usage: 'pomo uninstall',
+      'The user wants Claudoro removed from Claude Code, restoring their prior status line. Add --purge to also delete the history/data dir.',
+    usage: 'pomo uninstall [--purge [--yes]]',
+    flags: [
+      {
+        flag: '--purge',
+        desc: 'also delete the data dir (history, stats, backups, state); needs --yes to confirm',
+      },
+      { flag: '--yes', desc: 'confirm an irreversible --purge (otherwise a dry run)' },
+    ],
     examples: [
-      { cmd: 'pomo uninstall', desc: 'restore prior status line, remove hooks' },
+      {
+        cmd: 'pomo uninstall',
+        desc: 'restore prior status line, remove wiring (keeps data)',
+      },
+      {
+        cmd: 'pomo uninstall --purge',
+        desc: 'preview the data dir that --yes would delete',
+      },
+      {
+        cmd: 'pomo uninstall --purge --yes',
+        desc: 'unwire and permanently delete all data',
+      },
     ],
     notes: [
       'Restores the previous status line from backup and leaves no orphaned processes (D-005).',
+      'Data is kept by default; --purge removes it and is irreversible (dry run without --yes).',
+      'If installed as a Claude Code plugin, its SessionStart hook re-wires next session: remove the plugin via /plugin too. Uninstall warns when it detects this.',
     ],
-    next: ['Reinstall any time with `pomo setup`.'],
+    next: [
+      'Reinstall any time with `pomo setup`.',
+      'Remove the binary with `npm uninstall -g claudoro` (or `npm unlink -g`).',
+    ],
     seeAlso: ['setup'],
   },
 

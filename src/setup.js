@@ -6,7 +6,9 @@
  *   2. Back up settings.json, then merge the statusLine entry (with refreshInterval)
  *   3. Record every change in manifest.json for clean reversal
  *
- * `pomo uninstall`: reads manifest, reverses exactly.
+ * `pomo uninstall`: reads manifest, reverses exactly. Warns if a plugin install
+ *   is present (its SessionStart hook would re-wire next session). `--purge`
+ *   additionally removes the data dir (gated behind `--yes`, irreversible).
  * `npm uninstall -g claudoro` removes the binary; this handles the CC wiring.
  */
 import {
@@ -17,6 +19,7 @@ import {
   copyFileSync,
   unlinkSync,
   renameSync,
+  rmSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,32 +104,93 @@ export const setup = (env = process.env, { quiet = false } = {}) => {
 // Uninstall
 // ---------------------------------------------------------------------------
 
-export const uninstall = (env = process.env) => {
+/**
+ * Reverse the Claude Code wiring. Then, because a plugin install would re-wire
+ * on the next session, warn if one is present; and optionally purge the data dir
+ * when `--purge` is given (gated behind `--yes` like `undo`, since it is
+ * irreversible).
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ purge?: boolean, confirmed?: boolean }} [opts]
+ */
+export const uninstall = (
+  env = process.env,
+  { purge = false, confirmed = false } = {},
+) => {
   const paths = claudoroPaths(env);
   const manifest = loadManifest(paths.manifestFile);
 
-  if (!manifest[SETUP_MARKER]) {
-    console.log('[claudoro] Not set up (no manifest marker). Nothing to uninstall.');
+  if (manifest[SETUP_MARKER]) {
+    for (const entry of manifest.actions ?? []) {
+      if (entry.action === 'wrote' && existsSync(entry.path)) {
+        unlinkSync(entry.path);
+        console.log(`  [-] Removed: ${entry.path}`);
+      }
+      if (entry.action === 'set_statusline') {
+        restoreSettings(paths.claudeSettings, entry.backup, entry.previous);
+        console.log(`  [~] Restored prior statusLine in settings.json`);
+      }
+    }
+
+    // Clear the marker
+    delete manifest[SETUP_MARKER];
+    delete manifest.actions;
+    writeManifest(paths.manifestFile, manifest);
+
+    console.log('\nClaudoro uninstalled. Your previous status line has been restored.');
+  } else {
+    console.log('[claudoro] Not set up (no manifest marker). Nothing to unwire.');
+  }
+
+  // The plugin re-wires on next session, so unwiring alone is not enough.
+  const plugin = detectPlugin(paths);
+  if (plugin) {
+    console.log(
+      `\n[!] Claudoro is also installed as a Claude Code plugin (${plugin}).\n` +
+        `    Its SessionStart hook re-runs \`pomo setup\`, so this wiring will return\n` +
+        `    on your next session. Remove the plugin to finish: run \`/plugin\` and\n` +
+        `    uninstall Claudoro there.`,
+    );
+  }
+
+  // Optional, irreversible data purge.
+  if (purge) purgeState(paths, confirmed);
+};
+
+/**
+ * Detect a Claude Code plugin install of Claudoro by reading the plugin
+ * registry. Returns the plugin key (e.g. "claudoro@marketplace") or null when
+ * not installed as a plugin (or the registry is absent/unparseable).
+ */
+const detectPlugin = (paths) => {
+  try {
+    const data = JSON.parse(readFileSync(paths.installedPluginsFile, 'utf8'));
+    const keys = Object.keys(data.plugins ?? {});
+    return keys.find((k) => k === 'claudoro' || k.split('@')[0] === 'claudoro') ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Remove the Claudoro data directory (history, stats, backups, timer state).
+ * Without `confirmed` this only prints the plan, mirroring `undo`'s dry-run.
+ */
+const purgeState = (paths, confirmed) => {
+  if (!existsSync(paths.stateDir)) {
+    console.log(`\n[purge] No data directory to remove (${paths.stateDir}).`);
     return;
   }
-
-  for (const entry of manifest.actions ?? []) {
-    if (entry.action === 'wrote' && existsSync(entry.path)) {
-      unlinkSync(entry.path);
-      console.log(`  [-] Removed: ${entry.path}`);
-    }
-    if (entry.action === 'set_statusline') {
-      restoreSettings(paths.claudeSettings, entry.backup, entry.previous);
-      console.log(`  [~] Restored prior statusLine in settings.json`);
-    }
+  if (!confirmed) {
+    console.log(
+      `\n[purge] This will permanently delete your Claudoro data:\n` +
+        `    ${paths.stateDir}\n` +
+        `    (history, stats, backups, and timer state; this is irreversible).\n` +
+        `    Re-run to confirm: pomo uninstall --purge --yes`,
+    );
+    return;
   }
-
-  // Clear the marker
-  delete manifest[SETUP_MARKER];
-  delete manifest.actions;
-  writeManifest(paths.manifestFile, manifest);
-
-  console.log('\nClaudoro uninstalled. Your previous status line has been restored.');
+  rmSync(paths.stateDir, { recursive: true, force: true });
+  console.log(`\n[purge] Deleted ${paths.stateDir}. All history and state removed.`);
 };
 
 // ---------------------------------------------------------------------------
