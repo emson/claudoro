@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { claudoroPaths } from './platform/paths.js';
+import { readState, writeState } from './store-read.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -78,16 +79,21 @@ export const setup = (env = process.env, { quiet = false } = {}) => {
   log.push({ action: 'wrote', path: paths.pomoCmdFile });
   console.log(`  [+] Command file: ${paths.pomoCmdFile}`);
 
-  // 2. Merge statusLine into settings.json. Always record the action (with the
-  //    prior value, possibly null) so uninstall can reverse it even when there
-  //    was nothing to back up (AC-6).
-  const { backed_up, previous } = mergeStatusLine(paths, POMO_BIN);
-  log.push({
-    action: 'set_statusline',
-    backup: backed_up ?? null,
-    previous: previous ?? null,
-  });
-  console.log(`  [+] statusLine set in: ${paths.claudeSettings}`);
+  // 2. Merge statusLine into settings.json. Record the action (with the prior
+  //    value, possibly null) so uninstall can reverse it even when there was
+  //    nothing to back up (AC-6). If settings.json was unparseable we skipped it,
+  //    so do NOT record a reversal or claim success for a wiring that did not run.
+  const { backed_up, previous, skipped } = mergeStatusLine(paths, POMO_BIN);
+  if (skipped) {
+    console.log(`  [!] statusLine NOT set (settings.json unparseable, see above).`);
+  } else {
+    log.push({
+      action: 'set_statusline',
+      backup: backed_up ?? null,
+      previous: previous ?? null,
+    });
+    console.log(`  [+] statusLine set in: ${paths.claudeSettings}`);
+  }
 
   // 3. Write manifest
   manifest[SETUP_MARKER] = true;
@@ -117,6 +123,29 @@ export const uninstall = (
   { purge = false, confirmed = false } = {},
 ) => {
   const paths = claudoroPaths(env);
+
+  // Disarm any running timer FIRST so the detached alarm worker self-exits (the
+  // alarm_seq bump supersedes it on its next poll) and the headless timer cannot
+  // survive teardown or a --purge. This upholds the "no orphaned processes after
+  // uninstall" invariant. A lock-free write is sufficient here: this is teardown,
+  // not a contended hot mutation, and a superseded worker only ever self-exits.
+  const state = readState(env);
+  if (state.run_state !== 'idle') {
+    writeState(
+      {
+        ...state,
+        run_state: 'idle',
+        phase: null,
+        alarm_pid: null,
+        alarms_fired: [],
+        back_checkpoint: null,
+        alarm_seq: (state.alarm_seq ?? 0) + 1,
+      },
+      env,
+    );
+    console.log('  [-] Stopped the running timer.');
+  }
+
   const manifest = loadManifest(paths.manifestFile);
 
   if (manifest[SETUP_MARKER]) {
@@ -219,18 +248,27 @@ const mergeStatusLine = (paths, pomoBin) => {
     try {
       settings = JSON.parse(readFileSync(paths.claudeSettings, 'utf8'));
     } catch {
-      // Corrupt settings.json: never clobber. Print the exact snippet to add.
+      // Corrupt settings.json: never clobber. Print the exact snippet to add and
+      // signal `skipped` so setup does not claim success or record a reversal.
       console.warn(
         `[claudoro] settings.json could not be parsed, not touching it.\n` +
           `Add this manually under the top-level object:\n${manualSnippet(pomoBin)}`,
       );
-      return { backed_up: null, previous: null };
+      return { backed_up: null, previous: null, skipped: true };
     }
     if (settings.statusLine !== undefined) {
-      previous = settings.statusLine; // may be a string (legacy) or an object
-      const backup = `${paths.claudeSettings}.claudoro-backup.${Date.now()}`;
-      copyFileSync(paths.claudeSettings, backup);
-      backed_up = backup;
+      // Only capture a genuinely foreign line as `previous`. If it is already
+      // OUR line (e.g. setup re-ran after the manifest was lost), leave
+      // previous = null so uninstall removes it rather than "restoring" it.
+      const isOurs =
+        JSON.stringify(settings.statusLine) ===
+        JSON.stringify(claudoroStatusLine(pomoBin));
+      if (!isOurs) {
+        previous = settings.statusLine; // may be a string (legacy) or an object
+        const backup = `${paths.claudeSettings}.claudoro-backup.${Date.now()}`;
+        copyFileSync(paths.claudeSettings, backup);
+        backed_up = backup;
+      }
     }
   }
 
@@ -240,7 +278,7 @@ const mergeStatusLine = (paths, pomoBin) => {
   writeFileSync(tmp, JSON.stringify(settings, null, 2) + '\n', 'utf8');
   renameSync(tmp, paths.claudeSettings);
 
-  return { backed_up, previous };
+  return { backed_up, previous, skipped: false };
 };
 
 const restoreSettings = (settingsPath, backupPath, previousStatusLine) => {

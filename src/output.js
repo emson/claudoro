@@ -9,6 +9,7 @@ import { stdout } from 'node:process';
 import {
   remaining,
   formatMMSS,
+  formatFocusMin,
   isOvertime,
   overtimeSec,
   progressFraction,
@@ -159,8 +160,15 @@ export const ICONS = {
 
 const COLUMNS = () => (process.env.COLUMNS ? parseInt(process.env.COLUMNS, 10) : 80);
 
+// ANSI SGR sequences (e.g. from dim()) are zero-width; measure only the visible
+// glyphs so a colored column aligns exactly like a plain one. Without this, a
+// colored right-hand value drifts left by 8 invisible bytes on a color TTY.
+// eslint-disable-next-line no-control-regex
+const ANSI_SGR = /\x1b\[[0-9;]*m/g;
+const visibleLen = (s) => String(s).replace(ANSI_SGR, '').length;
+
 const row = (left, right, width = COLUMNS()) => {
-  const gap = Math.max(2, width - left.length - right.length);
+  const gap = Math.max(2, width - visibleLen(left) - visibleLen(right));
   return `  ${left}${' '.repeat(gap)}${right}`;
 };
 
@@ -922,6 +930,8 @@ export const renderHelp = (topic = null, prefs = {}) => {
       `[minimal|classic|full]`,
       `status-line layout (current: ${prefs.view ?? 'classic'})`,
     ),
+    cmdEntry('note', '"text"', brief('note')),
+    cmdEntry('tag', 'name', brief('tag')),
     cmdEntry('label', '"text"', brief('label')),
     cmdEntry('mute', '', brief('mute')),
     cmdEntry('unmute', '', brief('unmute')),
@@ -933,9 +943,10 @@ export const renderHelp = (topic = null, prefs = {}) => {
     cmdEntry('undo', '[N] [--today] [--dry-run] [--yes]', brief('undo')),
     cmdEntry('restore', '[backup-id]', brief('restore')),
     '',
-    bold('SETUP'),
+    bold('LEARN & SETUP'),
+    cmdEntry('guide', '[--web] [--json]', brief('guide')),
     cmdEntry('setup', '', brief('setup')),
-    cmdEntry('uninstall', '', brief('uninstall')),
+    cmdEntry('uninstall', '[--purge [--yes]]', brief('uninstall')),
     cmdEntry('help', '[command]', brief('help')),
     '',
     dim(`State: ${process.env.XDG_STATE_HOME ?? '~/.local/state'}/claudoro/`),
@@ -1172,16 +1183,8 @@ export const renderStats = (p) => {
 // Log rendering helpers (M5/M6)
 // ---------------------------------------------------------------------------
 
-/**
- * Format minutes as a human-readable duration: "2h 05m", "45m", "0m".
- * @param {number} min
- * @returns {string}
- */
-const formatFocus = (min) => {
-  const m = Math.round(min);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
-};
+// Shared with the HTML dashboard via derive.formatFocusMin (single source).
+const formatFocus = formatFocusMin;
 
 /**
  * Format an epoch-seconds timestamp as "HH:MM" (local time).

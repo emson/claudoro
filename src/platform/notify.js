@@ -139,10 +139,15 @@ const notify = async (cue, label) => {
   };
   const msg = messages[cue] || messages[CUE.focusEnd];
 
+  // The message embeds a user-controlled label; collapse control characters
+  // (a raw newline would otherwise make a multi-line literal that osascript and
+  // the toast XML reject, silently losing the notification).
+  const clean = msg.replace(/[\n\r\t\f\v]+/g, ' ');
+
   if (IS_MAC) {
     // Escape backslash and double-quote so a label with quotes can't break the
     // AppleScript string literal (the message is user-controlled).
-    const safe = msg.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const safe = clean.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     await trySpawn('osascript', [
       '-e',
       `display notification "${safe}" with title "Claudoro"`,
@@ -150,7 +155,7 @@ const notify = async (cue, label) => {
   } else if (IS_WIN) {
     // The message is embedded in a single-quoted PowerShell string; escape any
     // single quote by doubling it (PS rule) so a label with apostrophes is safe.
-    const safe = msg.replace(/'/g, "''");
+    const safe = clean.replace(/'/g, "''");
     const toast = [
       "$ErrorActionPreference='SilentlyContinue';",
       '[Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] > $null;',

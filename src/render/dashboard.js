@@ -11,13 +11,7 @@
  */
 
 import { escapeHtml, htmlDocument } from './html-shell.js';
-
-/** Minutes as "2h 05m" / "45m". */
-const fmtFocus = (min) => {
-  const m = Math.round(min);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
-};
+import { formatFocusMin as fmtFocus } from '../derive.js';
 
 const MONTHS = [
   'Jan',
