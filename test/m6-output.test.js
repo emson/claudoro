@@ -7,6 +7,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   renderHelp,
   colorMode,
@@ -15,6 +16,7 @@ import {
   renderBackups,
   COMMAND_HELP,
 } from '../src/output.js';
+import { main } from '../src/cli.js';
 import { makeRunningState, makeIdleState } from './helpers.js';
 
 // ---------------------------------------------------------------------------
@@ -623,4 +625,29 @@ describe('M6: renderCommandHelp — no ANSI in plain output', () => {
     const out = renderHelp('undo');
     assert.ok(!out.includes('—'), 'no em-dashes in undo help');
   });
+});
+
+describe('CLI: version command', () => {
+  const expected = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+  ).version;
+
+  const capture = async (fn) => {
+    const orig = console.log;
+    const lines = [];
+    console.log = (...a) => lines.push(a.join(' '));
+    try {
+      await fn();
+    } finally {
+      console.log = orig;
+    }
+    return lines.join('\n').trim();
+  };
+
+  for (const argv of [['--version'], ['version'], ['-v']]) {
+    it(`prints the package version for \`pomo ${argv.join(' ')}\``, async () => {
+      const out = await capture(() => main(argv));
+      assert.equal(out, expected);
+    });
+  }
 });

@@ -7,10 +7,18 @@
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  unlinkSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
-import { makeTempEnv } from './helpers.js';
+import { makeTempEnv, makeRunningState } from './helpers.js';
 import { setup, uninstall } from '../src/setup.js';
+import { readState, writeState } from '../src/store-read.js';
 import { claudoroPaths } from '../src/platform/paths.js';
 
 /** Run a (synchronous) setup/uninstall call without its console chatter. */
@@ -229,6 +237,60 @@ describe('M7: uninstall is plugin-aware', () => {
     quiet(() => setup(env));
     const out = capture(() => uninstall(env));
     assert.doesNotMatch(out, /plugin/i);
+  });
+});
+
+describe('M7: uninstall disarms a running timer', () => {
+  let env, cleanup;
+  beforeEach(() => {
+    ({ env, cleanup } = makeTempEnv());
+  });
+  afterEach(() => cleanup());
+
+  it('stops the timer and supersedes the worker (alarm_seq bumped)', () => {
+    quiet(() => setup(env));
+    writeState(makeRunningState({ alarm_seq: 3 }), env);
+
+    quiet(() => uninstall(env));
+
+    const s = readState(env);
+    assert.equal(s.run_state, 'idle', 'timer stopped on uninstall');
+    assert.equal(s.phase, null);
+    assert.ok(s.alarm_seq > 3, 'alarm_seq bumped so the detached worker self-exits');
+  });
+
+  it('leaves an idle state untouched (no spurious seq bump)', () => {
+    quiet(() => setup(env));
+    quiet(() => uninstall(env));
+    // No state.json was ever written (idle), so readState returns the default.
+    assert.equal(readState(env).run_state, 'idle');
+  });
+});
+
+describe('M7: setup does not capture its own statusLine on re-run after manifest loss', () => {
+  let env, cleanup, paths;
+  beforeEach(() => {
+    ({ env, cleanup } = makeTempEnv());
+    paths = claudoroPaths(env);
+  });
+  afterEach(() => cleanup());
+
+  it('keeps previous=null so uninstall removes our line (not "restores" it)', () => {
+    quiet(() => setup(env)); // wires our statusLine
+    unlinkSync(paths.manifestFile); // simulate a lost/corrupt manifest
+    quiet(() => setup(env)); // re-run must not capture our own line as previous
+
+    const manifest = readJson(paths.manifestFile);
+    const entry = manifest.actions.find((a) => a.action === 'set_statusline');
+    assert.equal(entry.previous, null, 'did not capture our own statusLine as previous');
+    assert.equal(backupFiles(paths.claudeDir).length, 0, 'no backup of our own line');
+
+    quiet(() => uninstall(env));
+    assert.equal(
+      readJson(paths.claudeSettings).statusLine,
+      undefined,
+      'our line is cleanly removed, not restored to itself',
+    );
   });
 });
 

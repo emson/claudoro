@@ -40,6 +40,25 @@ describe('M1: store', () => {
     assert.equal(read.label, 'test label');
   });
 
+  it('merges a valid-but-partial state over IDLE_STATE defaults (no NaN leak)', () => {
+    const { stateFile } = claudoroPaths(env);
+    // An older-schema / hand-edited file: running but missing fields.
+    writeFileSync(
+      stateFile,
+      JSON.stringify({ run_state: 'running', label: 'x' }),
+      'utf8',
+    );
+    const read = readState(env);
+    assert.equal(read.run_state, 'running');
+    assert.equal(read.label, 'x');
+    assert.equal(read.end_epoch, null, 'absent field falls back to idle default');
+    assert.equal(
+      read.config.max_overtime,
+      30,
+      'absent config field filled from defaults',
+    );
+  });
+
   it('mutateState applies the transform atomically and returns the new state', async () => {
     const next = await mutateState((s) => ({ ...s, label: 'mutated' }), env);
     assert.equal(next.label, 'mutated');
