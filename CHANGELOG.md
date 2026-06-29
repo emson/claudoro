@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-06-29
+
 ### Added
 - Abandoned-time handling (D-012): a forgotten timer (slept / walked away) finalized by `stop` or
   `next` long past its end now credits focus only up to `planned + max_overtime` (default 30 min)
@@ -67,3 +69,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 - Minimum Node bumped to 22 (Node 20 reached end of life).
+
+[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/emson/claudoro/releases/tag/v0.1.0
