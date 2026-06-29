@@ -582,6 +582,35 @@ export const COMMAND_HELP = Object.freeze({
     seeAlso: ['log', 'status'],
   },
 
+  guide: {
+    summary: 'Read the Pomodoro Technique guide, tailored to how Claudoro works.',
+    whenToUse:
+      'The user is new to the Pomodoro Technique, asks how to use it well, or wants to understand the method behind Claudoro (rules, interruptions, tuning, edge cases). Terminal panel by default, `--web` for a readable HTML page, `--json` for the structured content.',
+    usage: 'pomo guide [--web] [--json]',
+    flags: [
+      {
+        flag: '--web',
+        desc: 'write a self-contained HTML guide and open it in the browser',
+      },
+      { flag: '--json', desc: 'machine-readable guide content (schema-versioned)' },
+    ],
+    examples: [
+      { cmd: 'pomo guide', desc: 'read the guide in the terminal' },
+      { cmd: 'pomo guide --web', desc: 'open the guide as a web page in your browser' },
+      { cmd: 'pomo guide --json', desc: 'structured content for an agent or a script' },
+    ],
+    notes: [
+      'Static reference content: it reads the same whether or not a timer is running.',
+      'The web page is self-contained and shares the look of the stats dashboard.',
+      'If no browser can be opened (SSH/headless), `--web` prints the file path instead.',
+    ],
+    next: [
+      'Start your first cycle with `pomo start`.',
+      'Tune the cadence with the duration flags or `pomo mode`.',
+    ],
+    seeAlso: ['start', 'mode', 'stats'],
+  },
+
   log: {
     summary:
       'Show session history. Defaults to today; range and filter flags widen and narrow it.',

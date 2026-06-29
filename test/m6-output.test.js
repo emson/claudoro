@@ -586,6 +586,8 @@ describe('M6: COMMAND_HELP coverage — all CLI verbs present', () => {
     'mute',
     'unmute',
     'status',
+    'stats',
+    'guide',
     'log',
     'undo',
     'restore',

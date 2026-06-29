@@ -83,6 +83,7 @@ within about a second. **That's the under-2-minute path.**
 /pomo undo [N]      remove the last N records (backup written first)
 /pomo restore       restore from a backup
 
+/pomo guide         the Pomodoro Technique, tailored to Claudoro (--web for a web page)
 /pomo help [command]
 ```
 
@@ -158,6 +159,19 @@ pomo restore <backup-id>  # reverse it
 
 Everything is **local-first**: no network, no accounts, no telemetry. State lives under your XDG
 state dir and never leaves the machine. See [SECURITY.md](SECURITY.md).
+
+## Learn the technique
+
+New to the Pomodoro Technique, or want to use it well? `pomo guide` is a complete, standalone
+guide: what the method is, how a cycle works, the rules that make it stick, handling
+interruptions, the edge cases Claudoro mitigates for you, and how to tune the cadence. It reads
+in the terminal, or `--web` opens it as a self-contained page styled like the stats dashboard.
+
+```bash
+pomo guide          # read it in the terminal
+pomo guide --web    # open it as a web page
+pomo guide --json   # the structured content for an agent or script
+```
 
 ## Stats and dashboard
 
