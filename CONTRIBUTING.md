@@ -4,7 +4,7 @@ Thank you for your interest in contributing.
 
 ## Before you start
 
-Read `specs/spec.md` and `specs/decisions.md`. The spec defines the modules (M1-M8) and
+Read `specs/spec.md` and `specs/decisions.md`. The spec defines the modules (M1-M10) and
 acceptance tests. The decisions log explains *why* the design is the way it is. A PR that
 contradicts a decision without opening a new decision entry will not be merged.
 
@@ -38,8 +38,13 @@ Each `src/` file maps to a spec module:
 | `src/history.js` | M5 | JSONL records, undo, restore, backups |
 | `src/output.js` | M6 | TTY-aware help and output rendering |
 | `src/setup.js` | M7 | Claude Code wiring and uninstall |
+| `src/stats.js` | M9 | Pure `foldStats` analytics over the log |
+| `src/guide.js` | M10 | `GUIDE` content model + terminal renderer |
 | `src/render/segment.js` | M3 | Status-line segment composition |
 | `src/render/passthrough.js` | M3 | Model/context/git passthrough |
+| `src/render/dashboard.js` | M9 | Self-contained HTML stats dashboard |
+| `src/render/guide-html.js` | M10 | Self-contained HTML guide page |
+| `src/render/html-shell.js` | M9/M10 | Shared HTML theme + document shell |
 
 ## Code style
 
@@ -54,14 +59,37 @@ Each `src/` file maps to a spec module:
 1. Add a handler function in `src/cli.js`.
 2. Register it in the `VERBS` map.
 3. Add the state-machine logic to `src/timer.js` (if it mutates phase state).
-4. Write a test in `test/m2-timer.test.js` (or the appropriate module test).
+4. Add a `COMMAND_HELP` entry in `src/output.js` and the verb to the README usage list.
+5. Write a test in `test/m2-timer.test.js` (or the appropriate module test).
 
 ## Submitting a PR
 
 - One logical change per PR.
 - Include a test for any new behaviour path or error condition.
 - If your change affects the spec or a prior decision, update the relevant file and note it in the PR description.
-- Run `npm test && npm run lint` before opening.
+- Run `npm run check` before opening (lint, format, typecheck, tests). The pre-push hook enforces it.
+
+## When you change behaviour, update the docs
+
+Keep the surfaces honest in the same PR as the change:
+
+| If you change | Update |
+|---|---|
+| User-facing behaviour or a verb | `README.md` and the verb's `COMMAND_HELP` entry |
+| Anything notable | `CHANGELOG.md` under `[Unreleased]` (Keep a Changelog format) |
+| Architecture or a module | `specs/spec.md` (and the coverage matrix) |
+| A design tradeoff | a new entry in `specs/decisions.md` |
+
+## Releases and roadmap
+
+Releases are cut by maintainers via a version tag; the full runbook is in
+[`RELEASING.md`](RELEASING.md). Direction and planned work live in [`ROADMAP.md`](ROADMAP.md) and
+the GitHub milestones it links to.
+
+## Reporting bugs and security issues
+
+Use the issue templates for bugs and feature requests. Report security vulnerabilities privately
+via the process in [`SECURITY.md`](SECURITY.md), not a public issue.
 
 ## Decisions
 
