@@ -189,8 +189,8 @@ export const GUIDE = Object.freeze({
       url: 'https://www.penguinrandomhouse.com/books/555557/the-pomodoro-technique-by-francesco-cirillo/',
     },
     {
-      text: 'The official Pomodoro Technique site, Francesco Cirillo',
-      url: 'https://francescocirillo.com/products/the-pomodoro-technique',
+      text: 'The Pomodoro Technique, the official website',
+      url: 'https://www.pomodorotechnique.com/',
     },
     {
       text: 'Pomodoro Technique, Wikipedia (overview and history)',
