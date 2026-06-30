@@ -12,6 +12,8 @@ reliable alarm that fires even when the status line is hidden or every session i
 [![node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](https://nodejs.org)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+📖 [**Read the story behind Claudoro**](https://benemson.com/blog/agents/claudoro-pomodoro-timer-claude-code): why a Pomodoro timer belongs in your Claude Code status line.
+
 ```text
 🍅 22:47 ▕████████░░▏ ●●○○   Opus · 34% · main
 ```
