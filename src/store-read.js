@@ -49,6 +49,10 @@ export const DEFAULT_PREFS = Object.freeze({
   passthrough: 'model,context,git',
   motion: 'full',
   mute: false,
+  work: 25,
+  short: 5,
+  long: 15,
+  frequency: 4,
 });
 
 /** Ensure all required directories exist (mode 0700). */

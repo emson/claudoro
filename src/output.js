@@ -433,6 +433,65 @@ export const COMMAND_HELP = Object.freeze({
     seeAlso: ['mode', 'status'],
   },
 
+  work: {
+    summary: 'Get or set the default focus block duration.',
+    whenToUse:
+      'The user wants a focus duration other than 25 minutes to be the default for all future `pomo start` calls. Read first (no argument) to show the current setting.',
+    usage: 'pomo work [minutes] [--json]',
+    flags: [{ flag: '--json', desc: 'print the current/new value as JSON' }],
+    examples: [
+      { cmd: 'pomo work', desc: 'show the current default focus duration' },
+      { cmd: 'pomo work 50', desc: 'set focus blocks to 50 minutes by default' },
+    ],
+    notes: [
+      'Persisted in prefs; overridden per-session with `pomo start --work N` or `pomo start N`.',
+      'Accepts 1-120 minutes.',
+    ],
+    seeAlso: ['short', 'long', 'frequency', 'start'],
+  },
+
+  short: {
+    summary: 'Get or set the default short break duration.',
+    whenToUse:
+      'The user wants a short break duration other than 5 minutes to be the default. Read first (no argument) to show the current setting.',
+    usage: 'pomo short [minutes] [--json]',
+    flags: [{ flag: '--json', desc: 'print the current/new value as JSON' }],
+    examples: [
+      { cmd: 'pomo short', desc: 'show the current default short break duration' },
+      { cmd: 'pomo short 10', desc: 'set short breaks to 10 minutes by default' },
+    ],
+    notes: ['Accepts 1-60 minutes.'],
+    seeAlso: ['work', 'long', 'frequency', 'start'],
+  },
+
+  long: {
+    summary: 'Get or set the default long break duration.',
+    whenToUse:
+      'The user wants a long break duration other than 15 minutes to be the default. Read first (no argument) to show the current setting.',
+    usage: 'pomo long [minutes] [--json]',
+    flags: [{ flag: '--json', desc: 'print the current/new value as JSON' }],
+    examples: [
+      { cmd: 'pomo long', desc: 'show the current default long break duration' },
+      { cmd: 'pomo long 30', desc: 'set long breaks to 30 minutes by default' },
+    ],
+    notes: ['Accepts 1-120 minutes.'],
+    seeAlso: ['work', 'short', 'frequency', 'start'],
+  },
+
+  frequency: {
+    summary: 'Get or set how many focus blocks precede a long break.',
+    whenToUse:
+      'The user wants a cycle length other than 4 (the classic Pomodoro cadence). Read first (no argument) to show the current setting.',
+    usage: 'pomo frequency [N] [--json]',
+    flags: [{ flag: '--json', desc: 'print the current/new value as JSON' }],
+    examples: [
+      { cmd: 'pomo frequency', desc: 'show the current cycle frequency' },
+      { cmd: 'pomo frequency 6', desc: 'take a long break every 6 focus blocks' },
+    ],
+    notes: ['Accepts 1-20. Default is 4.'],
+    seeAlso: ['work', 'short', 'long', 'start'],
+  },
+
   note: {
     summary:
       'Append a note to the current block (additive). --set overwrites, --clear empties.',
@@ -929,6 +988,18 @@ export const renderHelp = (topic = null, prefs = {}) => {
       'view',
       `[minimal|classic|full]`,
       `status-line layout (current: ${prefs.view ?? 'classic'})`,
+    ),
+    cmdEntry(
+      'work',
+      '[mins]',
+      `default focus duration (current: ${prefs.work ?? 25}min)`,
+    ),
+    cmdEntry('short', '[mins]', `default short break (current: ${prefs.short ?? 5}min)`),
+    cmdEntry('long', '[mins]', `default long break (current: ${prefs.long ?? 15}min)`),
+    cmdEntry(
+      'frequency',
+      '[N]',
+      `focus blocks per long break (current: ${prefs.frequency ?? 4})`,
     ),
     cmdEntry('note', '"text"', brief('note')),
     cmdEntry('tag', 'name', brief('tag')),

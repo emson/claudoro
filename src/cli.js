@@ -157,10 +157,10 @@ const cmdStart = async ({ positional, flags }) => {
 
   const prefs = readPrefs();
   const config = {
-    work: mins ?? parseInt(flags.work ?? '25', 10),
-    short: parseInt(flags.short ?? '5', 10),
-    long: parseInt(flags.long ?? '15', 10),
-    frequency: parseInt(flags.frequency ?? '4', 10),
+    work: mins ?? parseInt(flags.work ?? String(prefs.work ?? 25), 10),
+    short: parseInt(flags.short ?? String(prefs.short ?? 5), 10),
+    long: parseInt(flags.long ?? String(prefs.long ?? 15), 10),
+    frequency: parseInt(flags.frequency ?? String(prefs.frequency ?? 4), 10),
     notify: parseInt(flags.notify ?? '1', 10),
     // flag > persisted pref > default (matches the mode precedence below)
     mute: 'mute' in flags ? true : (prefs.mute ?? false),
@@ -422,6 +422,39 @@ const cmdView = async ({ positional, flags }) => {
   if (flags.json) console.log(renderJson({ view: value }));
   else console.log(`View set to '${value}'.`);
 };
+
+/**
+ * Factory for integer-valued pref commands (work/short/long/frequency).
+ * @param {string} key - prefs key
+ * @param {number} defaultVal - built-in default
+ * @param {number} min - inclusive lower bound
+ * @param {number} max - inclusive upper bound
+ * @param {string} label - human-readable noun for messages
+ */
+const makeDurationCmd =
+  (key, defaultVal, min, max, label) =>
+  async ({ positional, flags }) => {
+    const prefs = readPrefs();
+    if (!positional[0]) {
+      const current = prefs[key] ?? defaultVal;
+      if (flags.json) console.log(renderJson({ [key]: current }));
+      else console.log(`${key}: ${current}min (default: ${defaultVal}min)`);
+      return;
+    }
+    const value = parseInt(positional[0], 10);
+    if (isNaN(value) || value < min || value > max) {
+      console.log(`${label} must be a number between ${min} and ${max}.`);
+      process.exit(1);
+    }
+    writePrefs({ ...prefs, [key]: value });
+    if (flags.json) console.log(renderJson({ [key]: value }));
+    else console.log(`${label} set to ${value}min.`);
+  };
+
+const cmdWork = makeDurationCmd('work', 25, 1, 120, 'Focus duration');
+const cmdShortBreak = makeDurationCmd('short', 5, 1, 60, 'Short break');
+const cmdLongBreak = makeDurationCmd('long', 15, 1, 120, 'Long break');
+const cmdFrequency = makeDurationCmd('frequency', 4, 1, 20, 'Cycle frequency');
 
 // `label` OVERWRITES the current label (replace semantics, the original
 // behaviour): `pomo label "x"` sets it to exactly "x". An empty arg or --clear
@@ -987,6 +1020,10 @@ const VERBS = {
   extend: cmdExtend,
   mode: cmdMode,
   view: cmdView,
+  work: cmdWork,
+  short: cmdShortBreak,
+  long: cmdLongBreak,
+  frequency: cmdFrequency,
   note: cmdNote,
   tag: cmdTag,
   label: cmdLabel, // overwrite (replace); `note` is the additive sibling
