@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-03
+
 ### Added
 - `pomo work`, `pomo short`, `pomo long`, `pomo frequency`: get or set the default durations
   persisted in prefs (D-013). Each follows the same read/write pattern as `pomo mode` and
@@ -22,8 +24,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   persisted `pomo work`/etc. commands, rejecting out-of-range or non-numeric input instead of
   silently accepting it. In particular, `--frequency 0` could previously disable long breaks for
   the rest of the session without any warning.
-- A hand-edited or otherwise corrupted duration value in `prefs.json` now heals back to the
-  built-in default on read instead of silently propagating `NaN` into the timer.
+- A hand-edited or otherwise corrupted duration value in `prefs.json` or `state.json` now heals
+  back to the built-in default on read instead of silently propagating `NaN` into the timer.
 
 ## [0.1.5] - 2026-06-30
 
@@ -184,7 +186,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 - Minimum Node bumped to 22 (Node 20 reached end of life).
 
-[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/emson/claudoro/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/emson/claudoro/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/emson/claudoro/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/emson/claudoro/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/emson/claudoro/compare/v0.1.2...v0.1.3
