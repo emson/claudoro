@@ -94,11 +94,13 @@ export const DEFAULT_PREFS = Object.freeze({
 /**
  * Coerce a persisted duration value back to a safe number: missing, non-numeric,
  * or out-of-bounds values fall back to the spec default. Mirrors the "corrupt
- * data degrades to a known-good state" contract `readPrefs` already applies to a
- * fully unparseable file, just per-field, so a hand-edited or stale `prefs.json`
- * can never hand a duration `NaN` (or an absurd value) down to the timer.
+ * data degrades to a known-good state" contract this file already applies to a
+ * fully unparseable file, just per-field, so a hand-edited or stale prefs/state
+ * file can never hand a duration `NaN` (or an absurd value) down to the timer.
+ * Shared by `readPrefs` and `readState` (D-013): the same corruption class can
+ * reach either file, so both heal it the same way.
  */
-const sanitizeDuration = (value, spec) => {
+export const sanitizeDuration = (value, spec) => {
   const n = typeof value === 'number' ? value : parseInt(value, 10);
   return Number.isInteger(n) && n >= spec.min && n <= spec.max ? n : spec.default;
 };
@@ -132,11 +134,15 @@ export const readState = (env = process.env) => {
     // Merge over IDLE_STATE so a valid-but-partial state (an older schema, or a
     // hand-edited file missing fields) falls back to defaults instead of feeding
     // `undefined` into time math (which would surface as NaN on the render path).
-    return {
-      ...IDLE_STATE,
-      ...parsed,
-      config: { ...IDLE_STATE.config, ...parsed.config },
-    };
+    const config = { ...IDLE_STATE.config, ...parsed.config };
+    // A hand-edited or pre-D-013 state.json can carry a corrupt/out-of-range
+    // duration in an otherwise-valid config object; heal those fields the same
+    // way readPrefs does, rather than letting a bad value reach the timer or
+    // render as NaN on a live running session.
+    for (const [key, spec] of Object.entries(DURATION_SPECS)) {
+      config[key] = sanitizeDuration(config[key], spec);
+    }
+    return { ...IDLE_STATE, ...parsed, config };
   } catch {
     // Quarantine corrupt file; never crash the status-line render
     const quarantine = join(stateDir, `.state.json.corrupt-${Date.now()}`);

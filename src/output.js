@@ -609,14 +609,15 @@ export const COMMAND_HELP = Object.freeze({
       { cmd: 'pomo status --json', desc: 'stable JSON for scripts and agents' },
     ],
     notes: [
-      'Shows phase, time remaining, cycle position, label, mode, mute, and today stats.',
+      'Shows phase, time remaining, cycle position, label, mode, view, mute, durations, and today stats.',
       'Today stats (completed blocks, focus minutes) are derived from the log, not stored (D-007).',
+      "Durations: while idle, shows your saved defaults (D-013); while running, shows the live session's actual values, which can differ if you changed a default mid-session.",
     ],
     next: [
       'Act on the state: `pomo pause`, `pomo extend`, `pomo skip`, `pomo stop`.',
       'Drill into past sessions with `pomo log`.',
     ],
-    seeAlso: ['log', 'stats', 'view'],
+    seeAlso: ['log', 'stats', 'view', 'work'],
   },
 
   stats: {
