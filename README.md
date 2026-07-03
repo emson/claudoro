@@ -78,6 +78,7 @@ within about a second. **That's the under-2-minute path.**
 /pomo status        rich detail: elapsed, label, today's count, next long break
 /pomo mode [auto|balanced|manual]
 /pomo view [minimal|classic|full]
+/pomo work | short | long | frequency [N]   get or set your default durations
 /pomo mute | unmute
 
 /pomo note "text"   add to the current block's label (supports #tags)
@@ -120,23 +121,27 @@ day always starts empty.
 
 ## Durations and cadence
 
-All four durations are overridable per run. Flags, not a config file:
+Four durations control the cadence. Set a personal default once with its `pomo` command, or
+override it for a single run with the matching flag:
 
-| Flag | Default | Controls |
-| ---- | ------- | -------- |
-| `-w, --work N` | 25 min | Focus block length |
-| `-s, --short N` | 5 min | Short break length |
-| `-l, --long N` | 15 min | Long break length |
-| `-f, --frequency N` | 4 | Focus blocks before a long break |
+| Command (persists) | Flag (one-off) | Default | Controls |
+| ------------------- | --------------- | ------- | -------- |
+| `pomo work [N]` | `-w, --work N` | 25 min | Focus block length |
+| `pomo short [N]` | `-s, --short N` | 5 min | Short break length |
+| `pomo long [N]` | `-l, --long N` | 15 min | Long break length |
+| `pomo frequency [N]` | `-f, --frequency N` | 4 | Focus blocks before a long break |
+
+Run any of the four with no argument to print its current default; `pomo status` shows all four
+together on its `Durations:` line.
 
 ```bash
-pomo start                         # defaults: 25/5/15, long break every 4
-pomo start 50                      # 50min focus, short/long/frequency unchanged
-pomo start -s 10 -l 30             # change break lengths only, keep 25min focus
-pomo start 50 -s 10 -l 30 -f 3    # full custom: 50/10/30, long break after every 3
+pomo work 50                       # save 50min as your default focus length, from now on
+pomo start                         # uses your saved defaults: 50/5/15, long break every 4
+pomo start -s 10 -l 30             # one-off: this run only, your saved defaults are untouched
+pomo start 25 -f 3                 # positional shorthand for work, still a one-off
 ```
 
-Durations are fixed for the life of a session. To change them, `pomo stop` and start again with new flags.
+Durations are fixed for the life of a session. To change them, `pomo stop` and start again.
 
 ## Transition modes
 

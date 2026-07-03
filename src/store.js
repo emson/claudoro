@@ -16,6 +16,7 @@ export {
   SCHEMA_VERSION,
   IDLE_STATE,
   DEFAULT_PREFS,
+  DURATION_SPECS,
   ensureDirs,
   readState,
   writeState,

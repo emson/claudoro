@@ -968,3 +968,64 @@ working because the credited value flows through the same field.
 persisted pref); or an OS-idle signal lands (D-010) and can distinguish present-overtime from
 absence precisely (then credit by presence, not magnitude, and auto-close on true idle rather than
 on elapsed threshold).
+
+---
+
+## D-013: Persisted default durations, revisiting D-003's own trigger clause
+**Date:** 2026-07-03
+**Status:** accepted
+**Context:** D-003 chose flag-only duration configuration for v1 and named its own revisit
+condition explicitly: "users request persistent per-project config... then a layered precedence
+(flag > project config > user config > defaults) is the natural extension." An external contributor
+(PR #11) hit exactly that friction, typing `-w 50 -s 10 -l 30 -f 3` on every `pomo start`, and added
+`pomo work` / `pomo short` / `pomo long` / `pomo frequency`: get-or-set commands, matching the
+existing `pomo mode` / `pomo view` pattern, that persist a personal default into `prefs.json`.
+
+**Choice:**
+- **User-level persisted defaults only.** `prefs.json` gains `work`/`short`/`long`/`frequency`
+  (default 25/5/15/4, the same canonical values D-003 chose). `pomo start` resolves each duration as
+  positional shorthand (work only) > flag > persisted pref > built-in default, mirroring the
+  mode precedence in D-006a. Flags remain fully live, per-session overrides; nothing about D-003's
+  flag interface changes.
+- **D-003's "project config" extension is explicitly declined here, not silently dropped.** A
+  three-tier `flag > project config > user config > default` precedence (a `.claudoro` file in a
+  repo root) is a materially bigger feature: a new install artifact, a new parser, a new precedence
+  question, and no user has asked for *project-scoped* durations specifically, only for not having
+  to retype flags. Building it now would be solving a hypothetical instead of the reported one.
+- **One source of truth for default/bounds, not five.** `DURATION_SPECS`
+  (`src/store-read.js`) is the single table of `{default, min, max, label, unit}` per duration key.
+  `DEFAULT_PREFS`, `IDLE_STATE.config`, `pomo start`'s flag validation, and the four `pomo
+  work`/etc. commands all derive from it, so adding a fifth duration-like setting later is one row,
+  not five hand-synced literals.
+- **Two validation contracts for two failure classes.** A value typed *right now*, a `start` flag or
+  a `pomo work N` argument, fails loud: reject with a clear message and exit 1, because it's a live
+  mistake the user should hear about immediately (`validateDuration` in `src/cli.js`). A value read
+  *from a file*, `prefs.json`, heals silently back to the spec default when missing, non-numeric, or
+  out of bounds (`sanitizeDuration` inside `readPrefs`, `src/store-read.js`), because a hand-edited
+  or stale file was never a keystroke, there's no "user" to show an error to at read time. This
+  mirrors how a corrupted `mode` pref already degrades safely to `auto` rather than erroring.
+- **`frequency` is a count, not a duration.** Its `DURATION_SPECS` entry carries `unit: ''` so
+  command output never mislabels it (e.g. "6" not "6min"), and its bound (`min: 1`) is not cosmetic:
+  `frequency: 0` previously reached `src/derive.js`'s `setIndex % frequency`, silently disabling
+  long breaks for the rest of the session (`NaN === 0` is always false). Both entry points now
+  reject it before it can reach the timer.
+
+**Why not alternatives:**
+- **A full generic prefs-schema system** (folding `mode`/`view`/`mute` into the same table-driven
+  dispatcher as the durations): more uniform, but rewrites three working, already-tested commands
+  that have no reported bug, solely for cosmetic consistency. Rejected as scope creep beyond the
+  actual gap.
+- **Validating inside the timer engine** (`T.start`) instead of at the CLI boundary: centralizes
+  the guard, but blurs a pure phase-transition function's job with input sanitization, and moves a
+  user's typo three calls away from where they made it, weakening the error. Rejected; validation
+  stays at the edge that received the input (D-001's CLI-as-source-of-truth boundary), consistent
+  with "fail loud at the CLI boundary, fail safe on the render path."
+
+**Consequences:** `Prefs` gains four fields (additive; an old `prefs.json` without them still
+resolves to 25/5/15/4 via `DEFAULT_PREFS`). `pomo status` gains a `Durations:` line, sourced from
+`prefs` while idle (previewing the next `pomo start`) and from `state.config` while running (the
+live session's actual values, which can differ from prefs if changed mid-session).
+
+**Revisit if:** someone actually asks for project-scoped durations (D-003's original extension,
+still open); or a fifth duration-like setting is added and the `pomo <verb> [value]` get-or-set
+pattern stops being the right shape for it.

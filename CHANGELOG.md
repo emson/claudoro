@@ -9,10 +9,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 - `pomo work`, `pomo short`, `pomo long`, `pomo frequency`: get or set the default durations
-  persisted in prefs. Each follows the same read/write pattern as `pomo mode` and `pomo view`:
-  called with no argument it prints the current value; called with a number it persists the new
-  default. `pomo start` uses these persisted values as its defaults, still overridable per-session
-  with the matching flag (`--work`, `--short`, `--long`, `--frequency`).
+  persisted in prefs (D-013). Each follows the same read/write pattern as `pomo mode` and
+  `pomo view`: called with no argument it prints the current value; called with a number it
+  persists the new default. `pomo start` uses these persisted values as its defaults, still
+  overridable per-session with the matching flag (`--work`, `--short`, `--long`, `--frequency`) or,
+  for focus length, the bare positional (`pomo start 50`).
+- `pomo status` gains a `Durations:` line showing the durations currently in effect: your saved
+  defaults while idle, the live session's actual values while running.
+
+### Fixed
+- A `pomo start` flag or positional duration is now validated against the same bounds as the
+  persisted `pomo work`/etc. commands, rejecting out-of-range or non-numeric input instead of
+  silently accepting it. In particular, `--frequency 0` could previously disable long breaks for
+  the rest of the session without any warning.
+- A hand-edited or otherwise corrupted duration value in `prefs.json` now heals back to the
+  built-in default on read instead of silently propagating `NaN` into the timer.
 
 ## [0.1.5] - 2026-06-30
 
