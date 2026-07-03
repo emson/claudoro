@@ -365,6 +365,9 @@ opening a PR.
 The flag interface and classic cadence follow [pymodoro](https://github.com/rogeralmeida/pymodoro),
 so anyone migrating gets zero relearning.
 
+Thanks to [Marco Ciotola](https://github.com/McCio) for persisted default durations
+(`pomo work`/`short`/`long`/`frequency`, [#11](https://github.com/emson/claudoro/pull/11)).
+
 ## Author
 
 Built by Ben Emson.
