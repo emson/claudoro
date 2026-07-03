@@ -12,6 +12,48 @@ import { claudoroPaths } from './platform/paths.js';
 
 export const SCHEMA_VERSION = 1;
 
+/**
+ * Single source of truth for the four persisted/overridable duration settings
+ * (D-013): default value plus the sane bound each one is validated against,
+ * whether the value arrives via a `pomo start` flag or a persisted `pomo work`
+ * style command. Add a row here to introduce a new duration-like setting.
+ */
+export const DURATION_SPECS = Object.freeze({
+  work: Object.freeze({
+    default: 25,
+    min: 1,
+    max: 120,
+    label: 'Focus duration',
+    unit: 'min',
+  }),
+  short: Object.freeze({
+    default: 5,
+    min: 1,
+    max: 60,
+    label: 'Short break',
+    unit: 'min',
+  }),
+  long: Object.freeze({
+    default: 15,
+    min: 1,
+    max: 120,
+    label: 'Long break',
+    unit: 'min',
+  }),
+  frequency: Object.freeze({
+    default: 4,
+    min: 1,
+    max: 20,
+    label: 'Cycle frequency',
+    unit: '',
+  }),
+});
+
+const durationDefaults = () =>
+  Object.fromEntries(
+    Object.entries(DURATION_SPECS).map(([key, spec]) => [key, spec.default]),
+  );
+
 export const IDLE_STATE = Object.freeze({
   schema: SCHEMA_VERSION,
   run_state: 'idle',
@@ -32,10 +74,7 @@ export const IDLE_STATE = Object.freeze({
   alarm_seq: 0,
   back_checkpoint: null,
   config: {
-    work: 25,
-    short: 5,
-    long: 15,
-    frequency: 4,
+    ...durationDefaults(),
     notify: 1,
     mute: false,
     back_window: 120,
@@ -49,11 +88,20 @@ export const DEFAULT_PREFS = Object.freeze({
   passthrough: 'model,context,git',
   motion: 'full',
   mute: false,
-  work: 25,
-  short: 5,
-  long: 15,
-  frequency: 4,
+  ...durationDefaults(),
 });
+
+/**
+ * Coerce a persisted duration value back to a safe number: missing, non-numeric,
+ * or out-of-bounds values fall back to the spec default. Mirrors the "corrupt
+ * data degrades to a known-good state" contract `readPrefs` already applies to a
+ * fully unparseable file, just per-field, so a hand-edited or stale `prefs.json`
+ * can never hand a duration `NaN` (or an absurd value) down to the timer.
+ */
+const sanitizeDuration = (value, spec) => {
+  const n = typeof value === 'number' ? value : parseInt(value, 10);
+  return Number.isInteger(n) && n >= spec.min && n <= spec.max ? n : spec.default;
+};
 
 /** Ensure all required directories exist (mode 0700). */
 export const ensureDirs = (env = process.env) => {
@@ -118,11 +166,16 @@ export const writeState = (state, env = process.env) => {
 
 export const readPrefs = (env = process.env) => {
   const { prefsFile } = claudoroPaths(env);
+  let prefs;
   try {
-    return { ...DEFAULT_PREFS, ...JSON.parse(readFileSync(prefsFile, 'utf8')) };
+    prefs = { ...DEFAULT_PREFS, ...JSON.parse(readFileSync(prefsFile, 'utf8')) };
   } catch {
-    return { ...DEFAULT_PREFS };
+    prefs = { ...DEFAULT_PREFS };
   }
+  for (const [key, spec] of Object.entries(DURATION_SPECS)) {
+    prefs[key] = sanitizeDuration(prefs[key], spec);
+  }
+  return prefs;
 };
 
 export const writePrefs = (prefs, env = process.env) => {

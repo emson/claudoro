@@ -18,6 +18,7 @@ import {
   creditedMin,
   wasAbandoned,
 } from './derive.js';
+import { DURATION_SPECS } from './store-read.js';
 
 // ---------------------------------------------------------------------------
 // TTY and color detection
@@ -1092,7 +1093,25 @@ const statusConfigLine = (prefs, state) => {
   );
 };
 
-/** Line 3: Today's completed pomodoros and focus minutes. */
+/**
+ * Line 3: durations in effect. Idle previews what the next `pomo start` will
+ * use (persisted prefs, D-013); running shows the live session's actual
+ * values, which can differ from prefs if they were changed mid-session.
+ * Deliberately does not fall back through `state.config` while idle: `toIdle`
+ * (src/timer.js) preserves the just-finished session's config, not a preview
+ * of the next one, so that would show stale numbers instead of the real default.
+ */
+const statusDurationsLine = (prefs, state) => {
+  const cfg =
+    state?.run_state === 'idle' ? (prefs ?? {}) : (state?.config ?? prefs ?? {});
+  const val = (key) => cfg[key] ?? DURATION_SPECS[key].default;
+  return (
+    `${dim('Durations:')} ${val('work')}/${val('short')}/${val('long')}` +
+    `${dim(' · ')}every ${val('frequency')}`
+  );
+};
+
+/** Line 4: Today's completed pomodoros and focus minutes. */
 const statusTodayLine = (aggregates) => {
   const n = aggregates?.completedToday ?? 0;
   const m = Math.round(aggregates?.focusMinToday ?? 0);
@@ -1100,7 +1119,7 @@ const statusTodayLine = (aggregates) => {
 };
 
 /**
- * Line 4: Next long break countdown (only when not idle).
+ * Line 5: Next long break countdown (only when not idle).
  * Uses live set_index from aggregates (see design note in cmdStatus).
  */
 const statusNextBreakLine = (aggregates) => {
@@ -1115,10 +1134,10 @@ const statusNextBreakLine = (aggregates) => {
   return dim(msg);
 };
 
-/** Line 5: Label, when present. */
+/** Line 6: Label, when present. */
 const statusLabelLine = (state) => `${dim('Label:')} "${state.label}"`;
 
-/** Line 6: Overtime nudge (yellow, gentle). */
+/** Line 7: Overtime nudge (yellow, gentle). */
 const statusOvertimeLine = (state, now) => {
   const over = overtimeSec(state, now);
   return yellow(
@@ -1138,6 +1157,7 @@ export const renderStatus = (state, aggregates, prefs) => {
     return [
       dim('○ Idle. Run `pomo start` to begin.'),
       statusConfigLine(prefs ?? {}, state ?? {}),
+      statusDurationsLine(prefs ?? {}, state ?? {}),
       statusTodayLine(aggregates ?? { completedToday: 0, focusMinToday: 0 }),
     ].join('\n');
   }
@@ -1145,6 +1165,7 @@ export const renderStatus = (state, aggregates, prefs) => {
   return [
     statusHeadline(state, now),
     statusConfigLine(prefs ?? {}, state),
+    statusDurationsLine(prefs ?? {}, state),
     statusTodayLine(aggregates),
     statusNextBreakLine(aggregates),
     state.label ? statusLabelLine(state) : null,

@@ -79,11 +79,14 @@ Unix/XDG defaults.
 | Backups | `…/claudoro/backups/` | pre-mutation snapshots (rolling, keep last K) | copies |
 | Manifest | `…/claudoro/manifest.json` | what `pomo setup` installed (for clean uninstall) | JSON |
 | Dashboard | `…/claudoro/dashboard.html` | rebuildable stats page (`pomo stats --web`); holds labels, not for casual sharing (D-011) | static HTML |
-| Prefs | `$XDG_CONFIG_HOME/claudoro/prefs.json` (`~/.config/claudoro/`) | persisted view mode, transition mode, passthrough, motion, color, mute default | JSON |
+| Prefs | `$XDG_CONFIG_HOME/claudoro/prefs.json` (`~/.config/claudoro/`) | persisted view mode, transition mode, passthrough, motion, color, mute default, duration defaults (D-013) | JSON |
 | Lock | `…/claudoro/lock` | `flock` target serialising all writes | empty file |
 
-Durations are **not** persisted (flag-only per D-003); `prefs.json` holds only persistent UX
-preferences (D-004/D-006a), which is distinct from the duration-config file D-003 declined.
+Durations have a persisted user-level default (`pomo work`/`short`/`long`/`frequency`, D-013,
+revisiting D-003's own trigger clause), resolved as flag > persisted pref > built-in default; the
+*project-level* config file D-003 originally declined remains out of scope. `prefs.json` also holds
+the persistent UX preferences from D-004/D-006a (view mode, transition mode, passthrough, motion,
+mute default).
 
 **Core principle: derive, do not store, aggregates** (D-007). Cycle position, today's count, focus
 minutes, next long break, and streaks are all computed by folding the immutable record list. There
@@ -509,6 +512,13 @@ Traced to charter Success Criteria (SC#1-6); SC#5 is revised per D-009.
   *when* `pomo stats --web`, *then* a self-contained HTML file is written (no external resources)
   and opened, or its path printed if no browser is available; *when* `pomo stats --json`, *then* a
   stable schema-versioned payload is emitted.
+- **AC-14 (D-013, persisted duration defaults):** *Given* `pomo work 50`, *when* `pomo start` runs
+  with no `--work` flag, *then* the block is 50 min; *given* an out-of-range or non-numeric value on
+  either entry point (`pomo work 999` or `pomo start --frequency 0`), *then* it is rejected (exit 1)
+  before it can reach the timer; *given* a hand-corrupted `prefs.json` duration value, *then*
+  `readPrefs` heals it to the built-in default rather than propagating `NaN`; *given* `pomo status`,
+  *then* it shows the durations that are actually in effect (persisted prefs while idle, the live
+  session's config while running).
 
 ## Test Specifications
 
@@ -528,6 +538,7 @@ Traced to charter Success Criteria (SC#1-6); SC#5 is revised per D-009.
 | (D-008) output discipline | TEST-M6-001 | ✓ Full |
 | (D-011) stats fold + HTML | TEST-M9-001, TEST-M9-002 | ✓ Full |
 | (D-012) abandoned-time credit | TEST-M2-004 | ✓ Full |
+| (D-013) persisted duration defaults | TEST-M1-003 | ✓ Full |
 | (M10) Pomodoro guide, 3 surfaces | test/m10-guide.test.js | ✓ Full |
 
 Test specs are generated progressively (baseline per behaviour path + error condition; more from
@@ -542,6 +553,16 @@ running block; `state.json` is valid JSON with exactly one running phase. **Deri
 **Source:** M1/D-009. **Type:** integration. **Preconditions:** block started in session A.
 **Steps:** 1. run `pomo pause` from session B. **Expected:** the global timer pauses; no error;
 ownership unaffected or self-heals. **Derived from:** D-009.
+
+### TEST-M1-003: Persisted duration defaults (D-013)
+**Source:** M1/D-013. **Type:** unit + integration (`test/m1-duration-prefs.test.js`).
+**Steps:** 1. `pomo work 50`; 2. resolve `pomo start`'s config from the persisted prefs with no
+flag. **Expected:** the resolved focus duration is 50 min. **Coverage also includes:** a
+non-numeric or out-of-range `prefs.json` duration heals to the `DURATION_SPECS` default rather than
+producing `NaN`; the same bound is enforced identically whether the value arrives via `pomo work N`
+or `pomo start --work N`, rejecting with exit 1 on either path; `pomo status`'s `Durations:` line
+sources from prefs while idle and from `state.config` while running. **Derived from:** D-013 (PR
+#11 review).
 
 ### TEST-M2-002: Custom durations and long-break cadence
 **Source:** M2/D-003. **Type:** unit. **Steps:** 1. `start -w 50 -f 3`; 2. complete 3 focuses.

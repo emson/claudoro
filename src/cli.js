@@ -13,6 +13,7 @@ import {
   applyTransition,
   readPrefs,
   writePrefs,
+  DURATION_SPECS,
 } from './store.js';
 import { claudoroPaths } from './platform/paths.js';
 import { openPath } from './platform/open.js';
@@ -145,6 +146,40 @@ export const parseArgs = (argv) => {
 // Verb handlers
 // ---------------------------------------------------------------------------
 
+/**
+ * Validate a directly-supplied duration value (a `start` flag or its bare
+ * positional) against its DURATION_SPECS bounds and fail loud on bad input
+ * (clear message, exit 1). This is the opposite contract from a persisted
+ * pref, which heals silently in `readPrefs` (D-013): a value typed right now
+ * is a live mistake the user should hear about immediately, not something to
+ * guess at. Returns `undefined` unchanged so callers can chain `?? prefs[key]`.
+ */
+const validateDuration = (key, raw) => {
+  if (raw === undefined) return undefined;
+  const spec = DURATION_SPECS[key];
+  const value = parseInt(raw, 10);
+  if (!Number.isInteger(value) || value < spec.min || value > spec.max) {
+    console.log(`${spec.label} must be a number between ${spec.min} and ${spec.max}.`);
+    process.exit(1);
+  }
+  return value;
+};
+
+/**
+ * Resolve the four duration config fields for `pomo start`: positional
+ * shorthand > flag > persisted pref (prefs are pre-sanitized by `readPrefs`,
+ * so the fallback is always a valid number, never `NaN`). Pure aside from the
+ * exit-on-invalid-input side effect inside `validateDuration`. Split out from
+ * `cmdStart` so it can be unit-tested without going through the side-effecting
+ * parts of `start` (locking, the alarm spawn).
+ */
+export const resolveStartDurations = (mins, flags, prefs) => ({
+  work: validateDuration('work', mins ?? flags.work) ?? prefs.work,
+  short: validateDuration('short', flags.short) ?? prefs.short,
+  long: validateDuration('long', flags.long) ?? prefs.long,
+  frequency: validateDuration('frequency', flags.frequency) ?? prefs.frequency,
+});
+
 const cmdStart = async ({ positional, flags }) => {
   const mins =
     positional[0] && /^\d+$/.test(positional[0]) ? parseInt(positional[0], 10) : null;
@@ -157,10 +192,7 @@ const cmdStart = async ({ positional, flags }) => {
 
   const prefs = readPrefs();
   const config = {
-    work: mins ?? parseInt(flags.work ?? String(prefs.work ?? 25), 10),
-    short: parseInt(flags.short ?? String(prefs.short ?? 5), 10),
-    long: parseInt(flags.long ?? String(prefs.long ?? 15), 10),
-    frequency: parseInt(flags.frequency ?? String(prefs.frequency ?? 4), 10),
+    ...resolveStartDurations(mins, flags, prefs),
     notify: parseInt(flags.notify ?? '1', 10),
     // flag > persisted pref > default (matches the mode precedence below)
     mute: 'mute' in flags ? true : (prefs.mute ?? false),
@@ -424,37 +456,36 @@ const cmdView = async ({ positional, flags }) => {
 };
 
 /**
- * Factory for integer-valued pref commands (work/short/long/frequency).
- * @param {string} key - prefs key
- * @param {number} defaultVal - built-in default
- * @param {number} min - inclusive lower bound
- * @param {number} max - inclusive upper bound
- * @param {string} label - human-readable noun for messages
+ * Factory for the get-or-set duration commands (work/short/long/frequency).
+ * Bounds and defaults come from DURATION_SPECS (D-013), the same table
+ * `cmdStart` validates flags against, so a value is judged identically no
+ * matter which of the two entry points it arrives through.
+ * @param {string} key - DURATION_SPECS / prefs key
  */
 const makeDurationCmd =
-  (key, defaultVal, min, max, label) =>
-  async ({ positional, flags }) => {
-    const prefs = readPrefs();
+  (key) =>
+  async ({ positional, flags }, env = process.env) => {
+    const spec = DURATION_SPECS[key];
+    const prefs = readPrefs(env);
     if (!positional[0]) {
-      const current = prefs[key] ?? defaultVal;
-      if (flags.json) console.log(renderJson({ [key]: current }));
-      else console.log(`${key}: ${current}min (default: ${defaultVal}min)`);
+      // prefs[key] is pre-sanitized by readPrefs, always a valid number here.
+      if (flags.json) console.log(renderJson({ [key]: prefs[key] }));
+      else
+        console.log(
+          `${key}: ${prefs[key]}${spec.unit} (default: ${spec.default}${spec.unit})`,
+        );
       return;
     }
-    const value = parseInt(positional[0], 10);
-    if (isNaN(value) || value < min || value > max) {
-      console.log(`${label} must be a number between ${min} and ${max}.`);
-      process.exit(1);
-    }
-    writePrefs({ ...prefs, [key]: value });
+    const value = validateDuration(key, positional[0]);
+    writePrefs({ ...prefs, [key]: value }, env);
     if (flags.json) console.log(renderJson({ [key]: value }));
-    else console.log(`${label} set to ${value}min.`);
+    else console.log(`${spec.label} set to ${value}${spec.unit}.`);
   };
 
-const cmdWork = makeDurationCmd('work', 25, 1, 120, 'Focus duration');
-const cmdShortBreak = makeDurationCmd('short', 5, 1, 60, 'Short break');
-const cmdLongBreak = makeDurationCmd('long', 15, 1, 120, 'Long break');
-const cmdFrequency = makeDurationCmd('frequency', 4, 1, 20, 'Cycle frequency');
+export const cmdWork = makeDurationCmd('work');
+export const cmdShortBreak = makeDurationCmd('short');
+export const cmdLongBreak = makeDurationCmd('long');
+export const cmdFrequency = makeDurationCmd('frequency');
 
 // `label` OVERWRITES the current label (replace semantics, the original
 // behaviour): `pomo label "x"` sets it to exactly "x". An empty arg or --clear
