@@ -134,7 +134,11 @@ op (`undo`, `log clear`, direct edit). Rolling retention (keep last K). `restore
 
 **Edge Cases:**
 - Missing/empty state → treat as `idle`.
-- Corrupt `state.json` → back up the bad file, log a warning, reinitialize to `idle` (never crash a render).
+- Corrupt `state.json` (unparseable) → back up the bad file, log a warning, reinitialize to `idle`
+  (never crash a render).
+- Valid `state.json` with a corrupt/out-of-range duration field in `config` (hand-edited, or written
+  by a pre-D-013 version) → heal that field to its `DURATION_SPECS` default, the same per-field
+  contract `readPrefs` applies to `prefs.json` (D-013); not a whole-file quarantine.
 - Read-only or absent HOME / state dir → fall back to `TMPDIR`, warn once, degrade.
 - Concurrent writers → serialized by `flock`; the renderer tolerates a momentarily missing/locked file by rendering last-known or nothing.
 

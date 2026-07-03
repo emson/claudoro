@@ -1000,10 +1000,11 @@ existing `pomo mode` / `pomo view` pattern, that persist a personal default into
 - **Two validation contracts for two failure classes.** A value typed *right now*, a `start` flag or
   a `pomo work N` argument, fails loud: reject with a clear message and exit 1, because it's a live
   mistake the user should hear about immediately (`validateDuration` in `src/cli.js`). A value read
-  *from a file*, `prefs.json`, heals silently back to the spec default when missing, non-numeric, or
-  out of bounds (`sanitizeDuration` inside `readPrefs`, `src/store-read.js`), because a hand-edited
-  or stale file was never a keystroke, there's no "user" to show an error to at read time. This
-  mirrors how a corrupted `mode` pref already degrades safely to `auto` rather than erroring.
+  *from a file*, `prefs.json` or `state.json`, heals silently back to the spec default when missing,
+  non-numeric, or out of bounds (the shared `sanitizeDuration` in `src/store-read.js`, applied by
+  both `readPrefs` and `readState`), because a hand-edited or stale file was never a keystroke,
+  there's no "user" to show an error to at read time. This mirrors how a corrupted `mode` pref
+  already degrades safely to `auto` rather than erroring.
 - **`frequency` is a count, not a duration.** Its `DURATION_SPECS` entry carries `unit: ''` so
   command output never mislabels it (e.g. "6" not "6min"), and its bound (`min: 1`) is not cosmetic:
   `frequency: 0` previously reached `src/derive.js`'s `setIndex % frequency`, silently disabling

@@ -5,11 +5,12 @@
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { makeTempEnv, makeRunningState, makeIdleState } from './helpers.js';
 import {
   readPrefs,
   writePrefs,
+  readState,
   DEFAULT_PREFS,
   DURATION_SPECS,
 } from '../src/store-read.js';
@@ -176,6 +177,51 @@ describe('M1: duration prefs healing (D-013)', () => {
   });
 });
 
+describe('M1: state.json duration healing (D-013)', () => {
+  let env, cleanup;
+
+  before(() => {
+    ({ env, cleanup } = makeTempEnv());
+    ensureDirs(env);
+  });
+  after(() => cleanup());
+
+  it('a corrupt duration on an otherwise-valid state.json heals to the spec default, not NaN', () => {
+    const { stateFile } = claudoroPaths(env);
+    writeFileSync(
+      stateFile,
+      JSON.stringify({ schema: 1, run_state: 'running', config: { work: 'abc' } }),
+      'utf8',
+    );
+    const state = readState(env);
+    assert.equal(state.config.work, DURATION_SPECS.work.default);
+    assert.ok(Number.isInteger(state.config.work), 'must be a finite integer, never NaN');
+  });
+
+  it('a zero frequency in state.json heals instead of silently disabling long breaks', () => {
+    const { stateFile } = claudoroPaths(env);
+    writeFileSync(
+      stateFile,
+      JSON.stringify({ schema: 1, run_state: 'running', config: { frequency: 0 } }),
+      'utf8',
+    );
+    assert.equal(readState(env).config.frequency, DURATION_SPECS.frequency.default);
+  });
+
+  it('a whole-file-valid, per-field-corrupt state.json is healed in place, not quarantined', () => {
+    const { stateFile } = claudoroPaths(env);
+    const raw = JSON.stringify({
+      schema: 1,
+      run_state: 'running',
+      config: { long: 9999 },
+    });
+    writeFileSync(stateFile, raw, 'utf8');
+    readState(env);
+    // A per-field heal, not a whole-file quarantine: the original file is untouched.
+    assert.equal(readFileSync(stateFile, 'utf8'), raw);
+  });
+});
+
 describe('M1: cmdWork / cmdShortBreak / cmdLongBreak / cmdFrequency verb handlers', () => {
   let env, cleanup;
 
@@ -237,7 +283,7 @@ describe('M1: cmdWork / cmdShortBreak / cmdLongBreak / cmdFrequency verb handler
   });
 });
 
-describe('M1: resolveStartDurations — pomo start precedence (D-013)', () => {
+describe('M1: resolveStartDurations, pomo start precedence (D-013)', () => {
   const prefs = { work: 25, short: 5, long: 15, frequency: 4 };
 
   it('falls back to prefs when nothing is supplied', () => {
