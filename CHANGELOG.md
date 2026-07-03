@@ -7,6 +7,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- `pomo work`, `pomo short`, `pomo long`, `pomo frequency`: get or set the default durations
+  persisted in prefs. Each follows the same read/write pattern as `pomo mode` and `pomo view`:
+  called with no argument it prints the current value; called with a number it persists the new
+  default. `pomo start` uses these persisted values as its defaults, still overridable per-session
+  with the matching flag (`--work`, `--short`, `--long`, `--frequency`).
+
 ## [0.1.5] - 2026-06-30
 
 ### Added
