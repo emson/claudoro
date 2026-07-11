@@ -12,6 +12,12 @@ import { claudoroPaths } from './platform/paths.js';
 import { withLock } from './platform/lock.js';
 import { readState, writeState } from './store-read.js';
 
+/**
+ * @typedef {import('./types.js').LiveState} LiveState
+ * @typedef {import('./types.js').PhaseRecord} PhaseRecord
+ * @typedef {import('./types.js').TransitionResult} TransitionResult
+ */
+
 export {
   SCHEMA_VERSION,
   IDLE_STATE,
@@ -27,6 +33,10 @@ export {
 /**
  * Read-modify-write under the lock.
  * `fn` receives the current state and must return the next state.
+ *
+ * @param {(state: LiveState) => LiveState} fn
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {Promise<LiveState>}
  */
 export const mutateState = (fn, env = process.env) => {
   const { lockFile } = claudoroPaths(env);
@@ -46,7 +56,9 @@ export const mutateState = (fn, env = process.env) => {
  * caller from re-inspecting state to guess what happened — side effects
  * (schedule alarm, append record, print message) key off `changed` instead.
  *
- * @returns {Promise<{ changed: boolean, state: object, prev: object, record?: object }>}
+ * @param {(state: LiveState) => ({state: LiveState, record?: PhaseRecord} | null)} transition
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {Promise<TransitionResult>}
  */
 export const applyTransition = (transition, env = process.env) => {
   const { lockFile } = claudoroPaths(env);

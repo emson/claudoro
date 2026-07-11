@@ -7,6 +7,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- Restored `npm run typecheck` (and CI) after the TypeScript 7 dependency bump, which tightened
+  inference for untyped/loosely-`object`-typed JSDoc so property access on plain `object` params
+  and defaulted `NodeJS.ProcessEnv` parameters started failing. Timer state, phase records, and CLI
+  flags now carry their real JSDoc types (`LiveState`, `PhaseRecord`, `Config`, etc.) end-to-end
+  through `store.js`, `timer.js`, `derive.js`, `stats.js`, `output.js`, and the status-line segment,
+  instead of the generic `object` placeholder. No runtime behavior change.
+
 ## [0.1.6] - 2026-07-03
 
 ### Added

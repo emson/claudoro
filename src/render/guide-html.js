@@ -94,7 +94,7 @@ ${refs
 
 /**
  * Render the guide as a complete, self-contained HTML document.
- * @param {import('../guide.js').GUIDE} g
+ * @param {typeof import('../guide.js').GUIDE} g
  * @param {{ generatedAt?: string }} [opts]
  * @returns {string}
  */

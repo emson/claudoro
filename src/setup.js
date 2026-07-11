@@ -241,7 +241,9 @@ const manualSnippet = (pomoBin) =>
 
 const mergeStatusLine = (paths, pomoBin) => {
   let settings = {};
+  /** @type {unknown} */
   let previous = null;
+  /** @type {string|null} */
   let backed_up = null;
 
   if (existsSync(paths.claudeSettings)) {

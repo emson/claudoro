@@ -36,7 +36,7 @@
  * Snapshot captured the instant BEFORE an auto/explicit phase transition fires,
  * stored on the post-transition state so `back` can restore it within the window.
  * @typedef {object} BackCheckpoint
- * @property {object} state               Full LiveState captured before the transition (its own back_checkpoint is null to prevent nesting)
+ * @property {LiveState} state            Full LiveState captured before the transition (its own back_checkpoint is null to prevent nesting)
  * @property {number} transition_epoch    Wall-clock epoch seconds when the transition fired (start of the back-window)
  * @property {string|null} record_id      id of the completed/skipped record appended by the transition, so `back` can remove it
  */
@@ -64,6 +64,7 @@
  * @property {number} alarm_seq               Monotonic alarm generation; only armAlarm increments it. A worker owns the alarm iff state.alarm_seq still equals the generation it was spawned with (D-009). Never reset by a transition or restored from a snapshot.
  * @property {BackCheckpoint|null} back_checkpoint  Pre-transition snapshot for `back`; null when none available
  * @property {Config} config
+ * @property {number} [last_toggle_ms]        Wall-clock ms of the last toggle that took effect, for the debounce window (D-010)
  */
 
 /**
@@ -135,7 +136,7 @@
  * @property {TagStat[]} tags                                    Top tags, descending by focus
  * @property {number[]} byHour                                   24 entries: focus minutes by local hour
  * @property {{completed:number, skipped:number, aborted:number, partial:number}} outcomes
- * @property {Array<{started:number, label:(string|null), phase:string, status:string, actualMin:number, abandoned:boolean}>} recent  Most recent focus blocks (capped)
+ * @property {Array<{started:number, label:(string|null), phase:Phase, status:RecordStatus, actualMin:number, abandoned:boolean}>} recent  Most recent focus blocks (capped)
  */
 
 /**

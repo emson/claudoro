@@ -63,8 +63,8 @@ const spawnWorker = (state, seq) => {
  * Because the generation always changes, calling armAlarm is sufficient to
  * supersede every previously-spawned worker. Callers never track or kill a pid.
  *
- * @param {object} [env]
- * @param {(state: object, seq: number) => (number|undefined)} [spawnFn] - injectable for tests
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {(state: import('./types.js').LiveState, seq: number) => (number|undefined)} [spawnFn] - injectable for tests
  * @returns {Promise<{ seq: number, pid: number|null }>}
  */
 export const armAlarm = async (env = process.env, spawnFn = spawnWorker) => {

@@ -4,6 +4,8 @@
  * This is the invariant that makes undo/restore correct by construction (D-007).
  *
  * All functions are pure: same inputs, same output, no side effects.
+ *
+ * @typedef {import('./types.js').PhaseRecord} PhaseRecord
  */
 
 // ---------------------------------------------------------------------------
@@ -179,7 +181,7 @@ export const parseJsonl = (raw) =>
  * its single authoritative source, so this fold returns only today's totals and
  * cannot drift from the dots.
  *
- * @param {object[]} records - All records in chronological order
+ * @param {PhaseRecord[]} records - All records in chronological order
  * @param {string} onDay - ISO date string 'YYYY-MM-DD' to count as "today"
  * @returns {{ completedToday: number, focusMinToday: number }}
  */
@@ -218,7 +220,7 @@ export const foldRecords = (records, onDay = today()) => {
  * (consistent with the rest of the day-bucketing), so a block that straddles
  * midnight counts toward the day it began. Default 0 folds all of history.
  *
- * @param {object[]} records - All records in chronological order
+ * @param {PhaseRecord[]} records - All records in chronological order
  * @param {number} [sinceEpoch] - ignore records started before this (epoch secs)
  * @returns {{ setIndex: number, setNumber: number }}
  */
@@ -295,7 +297,7 @@ export const shiftDate = (isoDate, delta) => {
 /**
  * Totals over an arbitrary record set, with no "today" coupling (unlike
  * foldRecords). Used for multi-day range summaries.
- * @param {object[]} records
+ * @param {PhaseRecord[]} records
  * @returns {{ completed: number, focusMin: number, total: number }}
  */
 export const summarize = (records) => {

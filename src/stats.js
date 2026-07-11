@@ -16,6 +16,8 @@
 import { shiftDate, creditedMin, wasAbandoned } from './derive.js';
 import { parseTags } from './label.js';
 
+/** @typedef {import('./types.js').PhaseRecord} PhaseRecord */
+
 export const STATS_SCHEMA = 1;
 
 const HEATMAP_WEEKS = 12; // trailing window shown in the focus heatmap
@@ -44,7 +46,7 @@ const focusMinOf = creditedMin;
 
 /**
  * Index completed-focus minutes and counts by local day.
- * @param {object[]} records
+ * @param {PhaseRecord[]} records
  * @returns {Map<string, {focusMin:number, pomodoros:number}>}
  */
 const indexByDay = (records) => {
@@ -144,7 +146,7 @@ const deriveTags = (records) => {
 
 /**
  * Fold the records into the stats payload. Pure: same records + now → same output.
- * @param {object[]} records - All PhaseRecords (chronological)
+ * @param {PhaseRecord[]} records - All PhaseRecords (chronological)
  * @param {number} nowSec - Current epoch seconds (read once at the CLI boundary)
  * @returns {import('./types.js').StatsPayload}
  */

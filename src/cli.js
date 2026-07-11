@@ -327,7 +327,7 @@ const cmdReset = async () => {
   const { changed, state } = await applyTransition((s) => T.reset(s));
   if (!changed) return console.log('Nothing running to reset.');
   await armAlarm();
-  console.log(`Reset. ${formatMMSS(state.planned_min * 60)} on the clock.`);
+  console.log(`Reset. ${formatMMSS((state.planned_min ?? 0) * 60)} on the clock.`);
 };
 
 const cmdNext = async ({ flags }) => {
@@ -672,7 +672,7 @@ const badDate = (d) => {
  * Resolve the range-selector flags to an inclusive [since, until] pair.
  * At most one selector may be set; conflicts and bad input exit(1). Defaults to
  * today. ISO date strings compare chronologically, so since <= until is lexical.
- * @param {object} flags
+ * @param {Record<string, string|boolean|undefined>} flags
  * @returns {{ since: string, until: string }}
  */
 const resolveRange = (flags) => {
@@ -696,11 +696,12 @@ const resolveRange = (flags) => {
     return { since: dates[0] ?? t, until: t };
   }
   if (flags.date != null) {
-    if (!ISO_DATE.test(flags.date)) badDate(flags.date);
-    return { since: flags.date, until: flags.date };
+    const date = String(flags.date);
+    if (!ISO_DATE.test(date)) badDate(date);
+    return { since: date, until: date };
   }
   if (flags.last != null) {
-    const n = parseInt(flags.last, 10);
+    const n = parseInt(String(flags.last), 10);
     if (!Number.isInteger(n) || n < 1 || String(n) !== String(flags.last)) {
       console.error('Usage: pomo log --last N   (N is a whole number >= 1)');
       process.exit(1);
@@ -708,8 +709,8 @@ const resolveRange = (flags) => {
     return { since: shiftDate(t, -(n - 1)), until: t };
   }
   if (flags.since != null || flags.until != null) {
-    const since = flags.since ?? t;
-    const until = flags.until ?? t;
+    const since = String(flags.since ?? t);
+    const until = String(flags.until ?? t);
     if (!ISO_DATE.test(since)) badDate(since);
     if (!ISO_DATE.test(until)) badDate(until);
     if (since > until) {

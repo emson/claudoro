@@ -1314,7 +1314,7 @@ const formatBackupTime = (id) => {
 
 /**
  * Render one log record as a single line.
- * @param {object} record - PhaseRecord
+ * @param {import('./types.js').PhaseRecord} record
  * @returns {string}
  */
 const renderLogRow = (record) => {
@@ -1356,7 +1356,7 @@ const renderLogRow = (record) => {
 /**
  * Render a day's records as a table (TTY) or clean plain text (captured).
  * @param {string} date - ISO 'YYYY-MM-DD'
- * @param {object[]} records - PhaseRecords for that date, chronological
+ * @param {import('./types.js').PhaseRecord[]} records - PhaseRecords for that date, chronological
  * @param {{completedToday:number, focusMinToday:number}} aggregates
  * @returns {string}
  */
@@ -1389,7 +1389,7 @@ const rangeTotals = (groups) =>
 /**
  * Render a multi-day range as a per-day SUMMARY: one row per day
  * (date, completed focus blocks, focus minutes) plus a grand total.
- * @param {{date:string, records:object[]}[]} groups - non-empty days, ascending
+ * @param {{date:string, records:import('./types.js').PhaseRecord[]}[]} groups - non-empty days, ascending
  * @param {string} since
  * @param {string} until
  * @returns {string}
@@ -1416,7 +1416,7 @@ export const renderLogSummary = (groups, since, until) => {
 /**
  * Render a multi-day range as full RECORDS grouped by day, each day with its own
  * sub-total, then a grand total. Used by `pomo log <range> --records`.
- * @param {{date:string, records:object[]}[]} groups - non-empty days, ascending
+ * @param {{date:string, records:import('./types.js').PhaseRecord[]}[]} groups - non-empty days, ascending
  * @returns {string}
  */
 export const renderLogRecords = (groups) => {

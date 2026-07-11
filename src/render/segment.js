@@ -17,6 +17,11 @@ import {
 } from '../derive.js';
 import { ICONS, seg, segmentColorMode } from '../output.js';
 
+/**
+ * @typedef {import('../types.js').LiveState} LiveState
+ * @typedef {import('../types.js').Prefs} Prefs
+ */
+
 // ---------------------------------------------------------------------------
 // Phase color selection
 // ---------------------------------------------------------------------------
@@ -93,8 +98,8 @@ export const renderDots = (setIndex, frequency) => {
 /**
  * Compose the Claudoro status-line segment.
  *
- * @param {object} state - Current live state
- * @param {object} prefs - User prefs (view, motion, etc.)
+ * @param {LiveState} state - Current live state
+ * @param {Partial<Prefs>} prefs - User prefs (view, motion, etc.)
  * @param {number} nowSec - Current epoch seconds (inject for testability)
  * @param {number} columns - Terminal width
  * @returns {string} The rendered segment (may be empty string when idle)

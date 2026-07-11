@@ -14,6 +14,13 @@ import {
   DEFAULT_MAX_OVERTIME_MIN,
 } from './derive.js';
 
+/**
+ * @typedef {import('./types.js').LiveState} LiveState
+ * @typedef {import('./types.js').Config} Config
+ * @typedef {import('./types.js').PhaseRecord} PhaseRecord
+ * @typedef {import('./types.js').TransitionMode} TransitionMode
+ */
+
 // ---------------------------------------------------------------------------
 // start
 // ---------------------------------------------------------------------------
@@ -28,9 +35,9 @@ import {
  * to the state's cached value when no cadence is supplied (keeps pure unit tests
  * and any caller that does not need re-derivation working).
  *
- * @param {object} state - Current state
- * @param {object} opts - { config, mode, label, sessionId, nowSec, cadence }
- * @returns {{ state: object } | null}
+ * @param {LiveState} state - Current state
+ * @param {{config?: Config, mode?: TransitionMode, label?: (string|null), sessionId?: (string|null), nowSec?: number, cadence?: {setIndex: number, setNumber: number}}} [opts]
+ * @returns {{ state: LiveState } | null}
  */
 export const start = (state, opts = {}) => {
   if (state.run_state !== 'idle') return null; // already running; caller reports
@@ -110,9 +117,9 @@ export const TOGGLE_DEBOUNCE_MS = 300;
  * (the CLI reads the clock once at the boundary and passes it down). Returns null
  * for idle (nothing to toggle) and for a debounced click; both are no-ops.
  *
- * @param {object} state
- * @param {object} opts - { nowSec, nowMs }
- * @returns {{ state: object } | null}
+ * @param {LiveState} state
+ * @param {{nowSec?: number, nowMs?: number}} [opts]
+ * @returns {{ state: LiveState } | null}
  */
 export const toggle = (state, opts = {}) => {
   const nowMs = opts.nowMs ?? Date.now();
@@ -202,9 +209,9 @@ export const next = (state, opts = {}) => {
  * boundary. Reports the record id to remove from the log so aggregates re-derive.
  * Non-recursive: the restored state carries no checkpoint.
  *
- * @param {object} state
- * @param {object} opts - { nowSec, windowSec }
- * @returns {{ ok: true, state: object, removeRecordId: string|null }
+ * @param {LiveState} state
+ * @param {{nowSec?: number, windowSec?: number}} [opts]
+ * @returns {{ ok: true, state: LiveState, removeRecordId: string|null }
  *         | { ok: false, reason: 'none' | 'expired', sinceSec?: number, windowSec?: number }}
  */
 export const back = (state, opts = {}) => {
@@ -269,7 +276,7 @@ const boundaryWaits = (mode, fromPhase) =>
  *     (ended at its planned end, so the detection delay is never counted as
  *     work) and enter the next phase, running.
  *
- * @returns {{ state: object, record: object } | null}
+ * @returns {{ state: LiveState, record: PhaseRecord } | null}
  */
 export const reconcileStep = (state, now) => {
   if (state.run_state !== 'running') return null;
@@ -317,8 +324,8 @@ const toIdle = (state) => ({
  * The captured snapshot's own back_checkpoint is nulled to prevent nesting
  * (checkpoints never chain, so `back` is non-recursive by construction).
  *
- * @param {object} prevState - State BEFORE the transition
- * @param {object} nextState - State AFTER advancing (from advanceTo)
+ * @param {LiveState} prevState - State BEFORE the transition
+ * @param {LiveState} nextState - State AFTER advancing (from advanceTo)
  * @param {number} transitionEpoch - Wall-clock epoch when the transition fired
  * @param {string|null} recordId - id of the record written by the transition
  */
